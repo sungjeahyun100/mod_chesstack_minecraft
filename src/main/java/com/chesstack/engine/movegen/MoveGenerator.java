@@ -7,7 +7,6 @@ import java.util.*;
 
 /**
  * MoveGenerator — Chessembly 인터프리터를 사용하여 합법 수를 생성한다.
- * Rust의 GameState::get_legal_moves()를 별도 클래스로 분리.
  */
 public final class MoveGenerator {
 
@@ -35,7 +34,7 @@ public final class MoveGenerator {
         if (board == null) return legalMoves;
 
         // 행마법 스크립트 결정
-        String script = piece.effectiveKind().chessemblyScript(piece.isWhite());
+        String script = piece.kind.chessemblyScript(piece.isWhite());
 
         // 인터프리터 실행
         Interpreter interpreter = new Interpreter();
@@ -53,44 +52,6 @@ public final class MoveGenerator {
                 catchTo = new Move.Square(pos.x + act.catchTo[0], pos.y + act.catchTo[1]);
             }
 
-            boolean isCapture = state.getBoard().contains(target);
-
-            legalMoves.add(new Move.LegalMove(
-                    pos, target, act.moveType, isCapture, act.tags, catchTo));
-        }
-
-        return legalMoves;
-    }
-
-    /**
-     * 커스텀 DSL 스크립트로 합법 수를 계산한다.
-     * 외부에서 정의한 행마법 스크립트를 사용할 때 호출.
-     */
-    public static List<Move.LegalMove> generateWithScript(
-            GameState state, String pieceId, String script) {
-
-        List<Move.LegalMove> legalMoves = new ArrayList<>();
-
-        Piece.PieceData piece = state.getPiece(pieceId);
-        if (piece == null || piece.pos == null) return legalMoves;
-
-        Move.Square pos = piece.pos;
-        BuiltinOps.BoardState board = state.toChessemblyBoard(pieceId);
-        if (board == null) return legalMoves;
-
-        Interpreter interpreter = new Interpreter();
-        interpreter.setDebug(state.isDebugMode());
-        interpreter.parse(script);
-        List<AST.Activation> activations = interpreter.execute(board);
-
-        for (AST.Activation act : activations) {
-            Move.Square target = new Move.Square(pos.x + act.dx, pos.y + act.dy);
-            if (!target.isValid()) continue;
-
-            Move.Square catchTo = new Move.Square(0, 0);
-            if (act.catchTo != null) {
-                catchTo = new Move.Square(pos.x + act.catchTo[0], pos.y + act.catchTo[1]);
-            }
             boolean isCapture = state.getBoard().contains(target);
 
             legalMoves.add(new Move.LegalMove(

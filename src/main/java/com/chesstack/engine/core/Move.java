@@ -89,7 +89,7 @@ public final class Move {
 
     // ── Action (플레이어 행동) ─────────────────────────
     public enum ActionType {
-        PLACE, MOVE, DISGUISE, CROWN, STUN
+        PLACE, MOVE, CROWN
     }
 
     public static final class Action {
@@ -97,37 +97,24 @@ public final class Move {
         public final String pieceId;
         public final Square from;     // MOVE 전용
         public final Square to;       // MOVE, PLACE 전용
-        public final String asKind;   // DISGUISE 전용
-        public final int stunAmount;  // STUN 전용
 
-        private Action(ActionType type, String pieceId, Square from, Square to,
-                       String asKind, int stunAmount) {
+        private Action(ActionType type, String pieceId, Square from, Square to) {
             this.type = type;
             this.pieceId = pieceId;
             this.from = from;
             this.to = to;
-            this.asKind = asKind;
-            this.stunAmount = stunAmount;
         }
 
         public static Action place(String pieceId, Square target) {
-            return new Action(ActionType.PLACE, pieceId, null, target, null, 0);
+            return new Action(ActionType.PLACE, pieceId, null, target);
         }
 
         public static Action move(String pieceId, Square from, Square to) {
-            return new Action(ActionType.MOVE, pieceId, from, to, null, 0);
-        }
-
-        public static Action disguise(String pieceId, String asKind) {
-            return new Action(ActionType.DISGUISE, pieceId, null, null, asKind, 0);
+            return new Action(ActionType.MOVE, pieceId, from, to);
         }
 
         public static Action crown(String pieceId) {
-            return new Action(ActionType.CROWN, pieceId, null, null, null, 0);
-        }
-
-        public static Action stun(String pieceId, int amount) {
-            return new Action(ActionType.STUN, pieceId, null, null, null, amount);
+            return new Action(ActionType.CROWN, pieceId, null, null);
         }
     }
 }

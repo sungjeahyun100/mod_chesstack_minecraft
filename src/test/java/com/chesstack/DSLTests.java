@@ -264,24 +264,81 @@ class DSLTests {
         assertEquals(4, acts.size());
     }
 
-    // ── 커스텀 기물 등록 테스트 ───────────────────────
+    // ── 소환 테스트 ─────────────────────────────────────────
 
     @Test
-    void testCustomPieceRegistration() {
-        StandardGenerators.registerScript("testpiece",
-                "take-move(2, 0); take-move(-2, 0);");
-
-        String script = StandardGenerators.getScript("testpiece", true);
-        assertEquals("take-move(2, 0); take-move(-2, 0);", script);
-
-        VM vm = new VM();
+    void testSummonTag() {
+        Interpreter interp = new Interpreter();
+        interp.parse("summon(pawn, 1, 0) take-move(0, 1);");
         BuiltinOps.BoardState board = makeEmptyBoard();
-        List<Activation> acts = vm.run(script, board);
+        List<Activation> acts = interp.execute(board);
 
-        assertEquals(2, acts.size());
-        assertTrue(acts.stream().anyMatch(a -> a.dx == 2 && a.dy == 0));
-        assertTrue(acts.stream().anyMatch(a -> a.dx == -2 && a.dy == 0));
+        assertEquals(1, acts.size());
+        assertTrue(acts.get(0).tags.stream()
+                .anyMatch(t -> t.tagType == ActionTagType.SUMMON && "pawn".equals(t.pieceName)));
+    }
 
-        StandardGenerators.unregisterScript("testpiece");
+    // ── 자동 이동 테스트 ───────────────────────────────────
+
+    @Test
+    void testAutoMoveTag() {
+        Interpreter interp = new Interpreter();
+        interp.parse("auto(0, 1) take-move(1, 0);");
+        BuiltinOps.BoardState board = makeEmptyBoard();
+        List<Activation> acts = interp.execute(board);
+
+        assertEquals(1, acts.size());
+        assertTrue(acts.get(0).tags.stream()
+                .anyMatch(t -> t.tagType == ActionTagType.AUTO_MOVE && "0,1".equals(t.key)));
+    }
+
+    @Test
+    void testAutoShiftTag() {
+        Interpreter interp = new Interpreter();
+        interp.parse("auto-shift(1, 0) take-move(0, 1);");
+        BuiltinOps.BoardState board = makeEmptyBoard();
+        List<Activation> acts = interp.execute(board);
+
+        assertEquals(1, acts.size());
+        assertTrue(acts.get(0).tags.stream()
+                .anyMatch(t -> t.tagType == ActionTagType.AUTO_MOVE && "1,0".equals(t.key) && t.value == 1));
+    }
+
+    // ── 히스토리 조건 테스트 ───────────────────────────────
+
+    @Test
+    void testHistoryMovedFalseWhenEmpty() {
+        Interpreter interp = new Interpreter();
+        interp.parse("history-moved(king) take-move(1, 0);");
+        BuiltinOps.BoardState board = makeEmptyBoard();
+        // 히스토리 비어있음 → false → 스킵
+        List<Activation> acts = interp.execute(board);
+        assertEquals(0, acts.size());
+    }
+
+    @Test
+    void testHistoryMovedTrueWithRecord() {
+        Interpreter interp = new Interpreter();
+        interp.parse("history-moved(king) take-move(1, 0);");
+        BuiltinOps.BoardState board = makeEmptyBoard();
+        board.moveHistory.add(new com.chesstack.engine.core.GameState.MoveRecord(
+                "wk0", com.chesstack.engine.core.Piece.PieceKind.KING,
+                new com.chesstack.engine.core.Move.Square(4, 0),
+                new com.chesstack.engine.core.Move.Square(4, 1), 1));
+        List<Activation> acts = interp.execute(board);
+        assertEquals(1, acts.size());
+    }
+
+    @Test
+    void testHistoryExists() {
+        Interpreter interp = new Interpreter();
+        interp.parse("history-exists(4, 0, 4, 1) take-move(1, 0);");
+        BuiltinOps.BoardState board = makeEmptyBoard();
+        board.moveHistory.add(new com.chesstack.engine.core.GameState.MoveRecord(
+                "wk0", com.chesstack.engine.core.Piece.PieceKind.KING,
+                new com.chesstack.engine.core.Move.Square(4, 0),
+                new com.chesstack.engine.core.Move.Square(4, 1), 1));
+        List<Activation> acts = interp.execute(board);
+        assertEquals(1, acts.size());
     }
 }

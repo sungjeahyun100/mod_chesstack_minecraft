@@ -22,7 +22,9 @@ public final class AST {
     // ── ActionTagType ─────────────────────────────────
     public enum ActionTagType {
         TRANSITION, // 기물 변환
-        SET_STATE   // 전역 상태 설정
+        SET_STATE,  // 전역 상태 설정
+        SUMMON,     // 기물 소환
+        AUTO_MOVE   // 자동 이동 설정
     }
 
     // ── ActionTag ─────────────────────────────────────
@@ -94,6 +96,10 @@ public final class AST {
         CORNER, CORNER_TOP_LEFT, CORNER_TOP_RIGHT, CORNER_BOTTOM_LEFT, CORNER_BOTTOM_RIGHT,
         // 상태
         PIECE, IF_STATE, SET_STATE, SET_STATE_RESET, TRANSITION,
+        // 소환·자동이동
+        SUMMON, AUTO_MOVE, AUTO_SHIFT,
+        // 히스토리 조건
+        HISTORY_MOVED, HISTORY_EXISTS,
         // 제어
         REPEAT, DO, WHILE, JMP, JNE, LABEL, NOT, END,
         // 구조

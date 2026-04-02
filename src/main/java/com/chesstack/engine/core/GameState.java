@@ -7,12 +7,31 @@ import java.util.*;
 
 /**
  * GameState — 전체 게임 상태 관리.
- * Rust의 GameState 구조체를 1:1 포팅.
  *
- * 포함: 보드, 포켓, 기물 맵, 턴 관리, 이동/착수/캡처/계승/위장/스턴,
- *       행마법 계산(chessembly 연동), 승리 조건 확인.
+ * 포함: 보드, 포켓, 기물 맵, 턴 관리, 이동/착수/캡처/계승,
+ *       행마법 계산(chessembly 연동), 승리 조건 확인, 중립 기물,
+ *       자동 이동, 이동 히스토리.
  */
 public final class GameState {
+
+    // ── 이동 기록 ─────────────────────────────────────
+
+    public static final class MoveRecord {
+        public final String pieceId;
+        public final Piece.PieceKind pieceKind;
+        public final Move.Square from;
+        public final Move.Square to;
+        public final int turnNumber;
+
+        public MoveRecord(String pieceId, Piece.PieceKind pieceKind,
+                          Move.Square from, Move.Square to, int turnNumber) {
+            this.pieceId = pieceId;
+            this.pieceKind = pieceKind;
+            this.from = from;
+            this.to = to;
+            this.turnNumber = turnNumber;
+        }
+    }
 
     // ── 필드 ──────────────────────────────────────────
 
@@ -20,16 +39,19 @@ public final class GameState {
     private final Map<Integer, List<Piece.PieceSpec>> pockets = new HashMap<>();
     private final Map<String, Piece.PieceData> pieces = new HashMap<>();
     private int turn;
+    private int turnNumber;
     private final Map<String, Integer> globalState = new HashMap<>();
     private String activePiece;   // 현재 턴에 이동 중인 기물 ID
     private boolean actionTaken;  // 이번 턴에 행동 여부
     private boolean debugMode;
     private int nextPieceId;
+    private final List<MoveRecord> moveHistory = new ArrayList<>();
 
     // ── 생성자 ────────────────────────────────────────
 
     public GameState(int startingPlayer) {
         this.turn = startingPlayer;
+        this.turnNumber = 0;
         setupInitialKings();
     }
 
@@ -56,8 +78,6 @@ public final class GameState {
         if (p == null) return;
         p.pos = square;
         p.isRoyal = true;
-        p.stun = 0;
-        p.moveStack = 3; // 킹 초기 이동 스택
         board.put(square, pieceId);
     }
 
@@ -182,13 +202,24 @@ public final class GameState {
 
         // 기물 생성 및 배치
         Piece.PieceData piece = createPiece(kind, player);
-        piece.stun = RuleSet.calculatePlacementStun(piece, target);
-        piece.moveStack = RuleSet.initialMoveStack(piece.score());
         piece.pos = target;
 
         pieces.put(piece.id, piece);
         board.put(target, piece.id);
         actionTaken = true;
+
+        return piece.id;
+    }
+
+    /** 중립 기물 착수 (보드에 직접 배치, 포켓 불필요) */
+    public String placeNeutralPiece(Piece.PieceKind kind, Move.Square target) {
+        if (board.contains(target)) throw new IllegalStateException("해당 칸에 이미 기물이 있습니다");
+
+        Piece.PieceData piece = createPiece(kind, RuleSet.NEUTRAL);
+        piece.pos = target;
+
+        pieces.put(piece.id, piece);
+        board.put(target, piece.id);
 
         return piece.id;
     }
@@ -207,12 +238,9 @@ public final class GameState {
 
         Piece.PieceData piece = pieces.get(pieceId);
         if (piece == null) throw new IllegalStateException("기물을 찾을 수 없습니다");
-        if (piece.owner != player) throw new IllegalStateException("자신의 기물이 아닙니다");
-
-        if (!piece.canMove()) {
-            if (piece.stun > 0)
-                throw new IllegalStateException("스턴 상태입니다 (스턴: " + piece.stun + ")");
-            throw new IllegalStateException("이동 스택이 없습니다");
+        // 자신의 기물 또는 중립 기물만 이동 가능
+        if (piece.owner != player && !piece.isNeutral()) {
+            throw new IllegalStateException("자신의 기물이 아닙니다");
         }
 
         boolean targetEmpty = !board.contains(to);
@@ -221,8 +249,8 @@ public final class GameState {
         if (targetPid != null) {
             Piece.PieceData tp = pieces.get(targetPid);
             if (tp != null) {
-                hasEnemy = tp.owner != player;
-                hasFriendly = tp.owner == player;
+                hasEnemy = tp.owner != player && !tp.isNeutral();
+                hasFriendly = tp.owner == player || tp.isNeutral();
             }
         }
 
@@ -261,7 +289,8 @@ public final class GameState {
         Piece.PieceData piece = pieces.get(pieceId);
         if (piece == null) throw new IllegalStateException("기물을 찾을 수 없습니다");
 
-        canMovePiece(piece.owner, pieceId, from, to, mv.moveType);
+        int player = piece.isNeutral() ? turn : piece.owner;
+        canMovePiece(player, pieceId, from, to, mv.moveType);
 
         String capturedId = null;
 
@@ -270,7 +299,6 @@ public final class GameState {
                 board.remove(from);
                 board.put(to, pieceId);
                 piece.pos = to;
-                piece.moveStack--;
                 break;
             }
             case TAKE:
@@ -283,7 +311,6 @@ public final class GameState {
                 board.remove(from);
                 board.put(to, pieceId);
                 piece.pos = to;
-                if (capturedId == null) piece.moveStack--;
                 break;
             }
             case CATCH: {
@@ -301,7 +328,6 @@ public final class GameState {
                 board.put(from, targetPid);
                 board.put(to, pieceId);
                 piece.pos = to;
-                piece.moveStack--;
                 Piece.PieceData tp = pieces.get(targetPid);
                 if (tp != null) tp.pos = from;
                 break;
@@ -310,7 +336,6 @@ public final class GameState {
                 board.remove(from);
                 board.put(to, pieceId);
                 piece.pos = to;
-                piece.moveStack--;
 
                 if (mv.catchTo != null && mv.catchTo.isValid()) {
                     String victimId = board.get(mv.catchTo);
@@ -323,22 +348,19 @@ public final class GameState {
             }
         }
 
+        // 이동 히스토리 기록
+        moveHistory.add(new MoveRecord(pieceId, piece.kind, from, to, turnNumber));
+
         activePiece = pieceId;
         applyActionTags(pieceId, mv.tags);
 
         return capturedId;
     }
 
-    /** 캡처 처리 (스택 이전) */
+    /** 캡처 처리 */
     public void capture(String attackerId, String victimId) {
         Piece.PieceData victim = pieces.get(victimId);
         if (victim == null) throw new IllegalStateException("피해자를 찾을 수 없습니다");
-
-        Piece.PieceData attacker = pieces.get(attackerId);
-        if (attacker != null) {
-            attacker.moveStack = attacker.moveStack - 1 + victim.moveStack;
-            attacker.stun += victim.stun;
-        }
 
         if (victim.pos != null) board.remove(victim.pos);
         pieces.remove(victimId);
@@ -355,7 +377,6 @@ public final class GameState {
                         if (p != null) {
                             Piece.PieceKind newKind = Piece.PieceKind.fromString(tag.pieceName);
                             p.kind = newKind;
-                            p.moveStack = RuleSet.initialMoveStack(newKind.score());
                         }
                     }
                     break;
@@ -363,11 +384,40 @@ public final class GameState {
                 case SET_STATE:
                     globalState.put(tag.key, tag.value);
                     break;
+                case SUMMON: {
+                    if (tag.pieceName != null) {
+                        Piece.PieceData acting = pieces.get(pieceId);
+                        if (acting != null) {
+                            int summonX = acting.pos.x + tag.value;
+                            int summonY = acting.pos.y + (tag.key != null ? Integer.parseInt(tag.key) : 0);
+                            Move.Square summonPos = new Move.Square(summonX, summonY);
+                            if (summonPos.isValid() && !board.contains(summonPos)) {
+                                Piece.PieceKind summonKind = Piece.PieceKind.fromString(tag.pieceName);
+                                Piece.PieceData summoned = createPiece(summonKind, turn);
+                                summoned.pos = summonPos;
+                                pieces.put(summoned.id, summoned);
+                                board.put(summonPos, summoned.id);
+                            }
+                        }
+                    }
+                    break;
+                }
+                case AUTO_MOVE: {
+                    Piece.PieceData p = pieces.get(pieceId);
+                    if (p != null && tag.pieceName != null) {
+                        Piece.AutoMoveMode mode = "shift".equals(tag.pieceName)
+                                ? Piece.AutoMoveMode.SHIFT
+                                : Piece.AutoMoveMode.TAKE_MOVE;
+                        p.autoMove = new Piece.AutoMove(tag.value,
+                                tag.key != null ? Integer.parseInt(tag.key) : 0, mode);
+                    }
+                    break;
+                }
             }
         }
     }
 
-    // ── 계승 / 위장 / 스턴 ────────────────────────────
+    // ── 계승 ──────────────────────────────────────────
 
     public void crownPiece(int player, String pieceId) {
         if (turn != player) throw new IllegalStateException("자신의 턴이 아닙니다");
@@ -377,39 +427,9 @@ public final class GameState {
         if (p == null) throw new IllegalStateException("기물을 찾을 수 없습니다");
         if (p.owner != player) throw new IllegalStateException("자신의 기물이 아닙니다");
         if (p.pos == null) throw new IllegalStateException("보드 위의 기물만 계승할 수 있습니다");
+        if (p.isNeutral()) throw new IllegalStateException("중립 기물은 계승할 수 없습니다");
 
         p.isRoyal = true;
-        actionTaken = true;
-    }
-
-    public void disguisePiece(int player, String pieceId, Piece.PieceKind asKind) {
-        if (turn != player) throw new IllegalStateException("자신의 턴이 아닙니다");
-        if (actionTaken || activePiece != null) throw new IllegalStateException("이번 턴에 이미 행동했습니다");
-
-        Piece.PieceData p = pieces.get(pieceId);
-        if (p == null) throw new IllegalStateException("기물을 찾을 수 없습니다");
-        if (p.owner != player) throw new IllegalStateException("자신의 기물이 아닙니다");
-        if (!p.isRoyal) throw new IllegalStateException("로얄 피스만 위장할 수 있습니다");
-
-        p.moveStack = RuleSet.initialMoveStack(asKind.score());
-        p.disguise = asKind;
-        actionTaken = true;
-    }
-
-    public void stunPiece(String pieceId, int amount) {
-        Piece.PieceData p = pieces.get(pieceId);
-        if (p == null) throw new IllegalStateException("기물을 찾을 수 없습니다");
-
-        boolean isAlly = p.owner == turn;
-        if (isAlly) {
-            if (amount < 1 || amount > 3)
-                throw new IllegalArgumentException("아군에게는 1~3 스턴만 부여할 수 있습니다");
-        } else {
-            if (amount != 1)
-                throw new IllegalArgumentException("적에게는 1 스턴만 부여할 수 있습니다");
-        }
-
-        p.stun += amount;
         actionTaken = true;
     }
 
@@ -426,31 +446,92 @@ public final class GameState {
             throw new IllegalStateException("프로모션 칸에 있지 않습니다");
 
         p.kind = toKind;
-        // 스택은 유지 (promotion.md)
     }
 
     // ── 턴 ────────────────────────────────────────────
 
     public void endTurn() {
-        // 현재 턴 기물 스턴 감소
-        for (Piece.PieceData p : pieces.values()) {
-            if (p.owner == turn) {
-                p.stun = Math.max(p.stun - 1, 0);
-            }
-        }
+        // 자동 이동 처리 (현재 턴 플레이어의 기물)
+        processAutoMoves();
 
         // 다음 플레이어
         turn = 1 - turn;
-
-        // 다음 턴 기물들 이동 스택 초기화
-        for (Piece.PieceData p : pieces.values()) {
-            if (p.owner == turn && p.pos != null) {
-                p.moveStack = RuleSet.initialMoveStack(p.score());
-            }
-        }
+        turnNumber++;
 
         activePiece = null;
         actionTaken = false;
+    }
+
+    /** 자동 이동 처리 — autoMove가 설정된 기물들 처리 */
+    private void processAutoMoves() {
+        // 기물 ID 순서로 처리 (결정론적 순서)
+        List<Piece.PieceData> autoMovePieces = new ArrayList<>();
+        for (Piece.PieceData p : pieces.values()) {
+            if (p.autoMove != null && p.pos != null) {
+                autoMovePieces.add(p);
+            }
+        }
+        autoMovePieces.sort(Comparator.comparing(p -> p.id));
+
+        for (Piece.PieceData p : autoMovePieces) {
+            if (p.autoMove == null || p.pos == null) continue; // 이전 auto-move로 상태 변경됨
+            if (!pieces.containsKey(p.id)) continue; // 캡처됨
+
+            Piece.AutoMove am = p.autoMove;
+            Move.Square target = new Move.Square(p.pos.x + am.dx, p.pos.y + am.dy);
+
+            if (!target.isValid()) {
+                p.autoMove = null; // 보드 밖 → 멈춤
+                continue;
+            }
+
+            String targetPid = board.get(target);
+
+            if (am.mode == Piece.AutoMoveMode.TAKE_MOVE) {
+                if (targetPid == null) {
+                    // 빈 칸 → 이동
+                    board.remove(p.pos);
+                    board.put(target, p.id);
+                    moveHistory.add(new MoveRecord(p.id, p.kind, p.pos, target, turnNumber));
+                    p.pos = target;
+                } else {
+                    Piece.PieceData tp = pieces.get(targetPid);
+                    if (tp != null && tp.owner != p.owner && !tp.isNeutral()) {
+                        // 적 → 잡기 + 이동
+                        capture(p.id, targetPid);
+                        board.remove(p.pos);
+                        board.put(target, p.id);
+                        moveHistory.add(new MoveRecord(p.id, p.kind, p.pos, target, turnNumber));
+                        p.pos = target;
+                    } else {
+                        p.autoMove = null; // 아군/중립 → 멈춤
+                    }
+                }
+            } else { // SHIFT
+                if (targetPid == null) {
+                    // 빈 칸 → 이동
+                    board.remove(p.pos);
+                    board.put(target, p.id);
+                    moveHistory.add(new MoveRecord(p.id, p.kind, p.pos, target, turnNumber));
+                    p.pos = target;
+                } else {
+                    Piece.PieceData tp = pieces.get(targetPid);
+                    if (tp != null) {
+                        // 기물 있음 → 위치 교환
+                        Move.Square oldPos = p.pos;
+                        board.remove(p.pos);
+                        board.remove(target);
+                        board.put(oldPos, targetPid);
+                        board.put(target, p.id);
+                        moveHistory.add(new MoveRecord(p.id, p.kind, oldPos, target, turnNumber));
+                        tp.pos = oldPos;
+                        p.pos = target;
+                    } else {
+                        p.autoMove = null; // 멈춤
+                    }
+                }
+            }
+        }
     }
 
     // ── 승리 조건 ─────────────────────────────────────
@@ -460,7 +541,7 @@ public final class GameState {
         for (Piece.PieceData p : pieces.values()) {
             if (p.isRoyal) {
                 if (p.owner == 0) whiteHasRoyal = true;
-                else blackHasRoyal = true;
+                else if (p.owner == 1) blackHasRoyal = true;
             }
         }
         if (!whiteHasRoyal) return Move.GameResult.BLACK_WINS;
@@ -475,11 +556,14 @@ public final class GameState {
         Piece.PieceData piece = pieces.get(pieceId);
         if (piece == null || piece.pos == null) return null;
 
+        // 중립 기물 이동 시: 현재 턴 플레이어의 관점으로 처리
+        boolean isWhitePerspective = piece.isNeutral() ? (turn == 0) : piece.isWhite();
+
         BuiltinOps.BoardState bs = new BuiltinOps.BoardState(
                 RuleSet.BOARD_WIDTH, RuleSet.BOARD_HEIGHT,
                 piece.pos.x, piece.pos.y,
-                piece.effectiveKind().scriptName(),
-                piece.isWhite()
+                piece.kind.scriptName(),
+                isWhitePerspective
         );
 
         // 보드 위 모든 기물 등록
@@ -487,12 +571,17 @@ public final class GameState {
             Move.Square sq = entry.getKey();
             Piece.PieceData p = pieces.get(entry.getValue());
             if (p != null) {
-                bs.putPiece(sq.x, sq.y, p.effectiveKind().scriptName(), p.isWhite());
+                boolean pIsWhite = p.isNeutral() ? isWhitePerspective : p.isWhite();
+                bs.putPiece(sq.x, sq.y, p.kind.scriptName(), pIsWhite,
+                            p.isNeutral() ? RuleSet.NEUTRAL : p.owner);
             }
         }
 
         // 전역 상태 복사
         bs.state.putAll(globalState);
+
+        // 이동 히스토리 복사
+        bs.moveHistory.addAll(moveHistory);
 
         return bs;
     }
@@ -542,17 +631,9 @@ public final class GameState {
                 }
                 break;
             }
-            case STUN:
-                stunPiece(action.pieceId, action.stunAmount);
-                break;
             case CROWN: {
                 Piece.PieceData p = pieces.get(action.pieceId);
-                if (p != null) p.isRoyal = true;
-                break;
-            }
-            case DISGUISE: {
-                Piece.PieceData p = pieces.get(action.pieceId);
-                if (p != null) p.disguise = Piece.PieceKind.fromString(action.asKind);
+                if (p != null) crownPiece(turn, action.pieceId);
                 break;
             }
         }
@@ -562,6 +643,7 @@ public final class GameState {
 
     public Board getBoard()             { return board; }
     public int getTurn()                { return turn; }
+    public int getTurnNumber()          { return turnNumber; }
     public String getActivePiece()      { return activePiece; }
     public boolean isActionTaken()      { return actionTaken; }
     public boolean isDebugMode()        { return debugMode; }
@@ -586,6 +668,10 @@ public final class GameState {
 
     public Map<String, Integer> getGlobalState() {
         return Collections.unmodifiableMap(globalState);
+    }
+
+    public List<MoveRecord> getMoveHistory() {
+        return Collections.unmodifiableList(moveHistory);
     }
 
     /** 보드 위 모든 기물 정보 반환 */

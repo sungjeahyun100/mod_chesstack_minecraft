@@ -1,10 +1,11 @@
 package com.chesstack.engine.dsl.chessembly;
 
+import com.chesstack.engine.core.GameState;
+
 import java.util.*;
 
 /**
  * BuiltinOps — Chessembly 실행에 필요한 보드 상태(BoardState) 및 유틸리티.
- * Rust의 BoardState 구조체를 1:1 포팅.
  */
 public final class BuiltinOps {
 
@@ -14,10 +15,16 @@ public final class BuiltinOps {
     public static final class PieceInfo {
         public final String name;
         public final boolean isWhite;
+        public final int owner; // 0=백, 1=흑, 2=중립
 
-        public PieceInfo(String name, boolean isWhite) {
+        public PieceInfo(String name, boolean isWhite, int owner) {
             this.name = name;
             this.isWhite = isWhite;
+            this.owner = owner;
+        }
+
+        public boolean isNeutral() {
+            return owner == 2;
         }
     }
 
@@ -37,6 +44,8 @@ public final class BuiltinOps {
         public final Set<Long> dangerSquares = new HashSet<>();
         /** 체크 상태 */
         public boolean inCheck;
+        /** 이동 히스토리 */
+        public final List<GameState.MoveRecord> moveHistory = new ArrayList<>();
 
         public BoardState(int boardWidth, int boardHeight, int pieceX, int pieceY,
                           String pieceName, boolean isWhite) {
@@ -53,7 +62,11 @@ public final class BuiltinOps {
         }
 
         public void putPiece(int x, int y, String name, boolean white) {
-            pieces.put(key(x, y), new PieceInfo(name, white));
+            pieces.put(key(x, y), new PieceInfo(name, white, white ? 0 : 1));
+        }
+
+        public void putPiece(int x, int y, String name, boolean white, int owner) {
+            pieces.put(key(x, y), new PieceInfo(name, white, owner));
         }
 
         public boolean inBounds(int x, int y) {
@@ -64,14 +77,20 @@ public final class BuiltinOps {
             return inBounds(x, y) && !pieces.containsKey(key(x, y));
         }
 
+        /** 적 판정: 중립 기물은 아군이므로 적이 아님 */
         public boolean hasEnemy(int x, int y) {
             PieceInfo info = pieces.get(key(x, y));
-            return info != null && info.isWhite != this.isWhite;
+            if (info == null) return false;
+            if (info.isNeutral()) return false; // 중립은 적이 아님
+            return info.isWhite != this.isWhite;
         }
 
+        /** 아군 판정: 중립 기물은 모두에게 아군 */
         public boolean hasFriendly(int x, int y) {
             PieceInfo info = pieces.get(key(x, y));
-            return info != null && info.isWhite == this.isWhite;
+            if (info == null) return false;
+            if (info.isNeutral()) return true; // 중립은 아군
+            return info.isWhite == this.isWhite;
         }
 
         public boolean hasPiece(int x, int y, String pieceName) {
@@ -85,6 +104,23 @@ public final class BuiltinOps {
 
         public boolean isDanger(int x, int y) {
             return dangerSquares.contains(key(x, y));
+        }
+
+        /** 히스토리: 특정 종류의 기물이 이동한 적이 있는지 */
+        public boolean hasKindMoved(String kindName) {
+            for (GameState.MoveRecord r : moveHistory) {
+                if (r.pieceKind.scriptName().equals(kindName)) return true;
+            }
+            return false;
+        }
+
+        /** 히스토리: 특정 좌표 간 이동이 존재하는지 */
+        public boolean hasMoveExists(int fromX, int fromY, int toX, int toY) {
+            for (GameState.MoveRecord r : moveHistory) {
+                if (r.from.x == fromX && r.from.y == fromY
+                        && r.to.x == toX && r.to.y == toY) return true;
+            }
+            return false;
         }
     }
 }

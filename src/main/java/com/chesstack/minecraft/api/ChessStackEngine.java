@@ -12,14 +12,15 @@ import java.util.*;
  *
  * 사용 흐름:
  * 1. createGame()
- * 2. loadDSLPiece() (선택)
- * 3. getLegalMoves() / makeMove() / endTurn()
- * 4. getGameResult()
+ * 2. getLegalMoves() / makeMove() / endTurn()
+ * 3. getGameResult()
  */
 public final class ChessStackEngine {
 
     /** 활성 게임 스토리지 (게임 ID → GameState) */
     private final Map<String, GameState> games = new HashMap<>();
+    /** 테스트 모드 스토리지 (게임 ID → TestMode) */
+    private final Map<String, TestMode> testModes = new HashMap<>();
     private int nextGameId = 1;
 
     // ── 게임 생성 ─────────────────────────────────────
@@ -49,22 +50,6 @@ public final class ChessStackEngine {
         return id;
     }
 
-    // ── DSL 기물 로드 ─────────────────────────────────
-
-    /**
-     * 커스텀 DSL 기물을 로드한다.
-     *
-     * @param pieceName 기물 이름 (소문자)
-     * @param script    Chessembly 스크립트
-     */
-    public void loadDSLPiece(String pieceName, String script) {
-        StandardGenerators.registerScript(pieceName, script);
-    }
-
-    /** 여러 커스텀 기물을 한번에 등록 */
-    public void loadDSLPieces(Map<String, String> nameToScript) {
-        nameToScript.forEach(StandardGenerators::registerScript);
-    }
 
     // ── 이동 ──────────────────────────────────────────
 
@@ -143,5 +128,26 @@ public final class ChessStackEngine {
     /** 디버그 모드 설정 */
     public void setDebugMode(String gameId, boolean debug) {
         getGame(gameId).setDebugMode(debug);
+    }
+
+    // ── 테스트 모드 ────────────────────────────────────────────
+
+    /** 테스트 모드 생성 */
+    public TestMode createTestMode(String gameId) {
+        TestMode tm = new TestMode();
+        testModes.put(gameId, tm);
+        return tm;
+    }
+
+    /** 테스트 모드 조회 */
+    public TestMode getTestMode(String gameId) {
+        TestMode tm = testModes.get(gameId);
+        if (tm == null) throw new IllegalArgumentException("테스트 모드가 없습니다: " + gameId);
+        return tm;
+    }
+
+    /** 테스트 모드 제거 */
+    public void removeTestMode(String gameId) {
+        testModes.remove(gameId);
     }
 }

@@ -31,8 +31,7 @@ public final class Piece {
         TEMPEST_ROOK("tempestrook", 7),
         CANNON("cannon", 5),
         BOUNCING_BISHOP("bouncingbishop", 7),
-        EXPERIMENT("experiment", 1),
-        CUSTOM("custom", 3);
+        EXPERIMENT("experiment", 1);
 
         private final String scriptName;
         private final int score;
@@ -61,14 +60,7 @@ public final class Piece {
             return isWhite ? sq.y == 7 : sq.y == 0;
         }
 
-        public int distanceToPromotion(Move.Square sq, boolean isWhite) {
-            if (!canPromote()) return 0;
-            return isWhite ? 7 - sq.y : sq.y;
-        }
 
-        public int maxPromotionStun() {
-            return this == PAWN ? 8 : 0;
-        }
 
         /** Chessembly 행마법 스크립트 반환 */
         public String chessemblyScript(boolean isWhite) {
@@ -176,10 +168,6 @@ public final class Piece {
                          + " move(1, 1); move(-1, 1); move(-1, -1); move(1, -1);"
                          + " catch(2, 2);";
 
-                case CUSTOM:
-                    return "take-move(1, 0); take-move(-1, 0); take-move(0, 1); take-move(0, -1);"
-                         + " take-move(1, 1); take-move(1, -1); take-move(-1, 1); take-move(-1, -1);";
-
                 default:
                     return "";
             }
@@ -187,7 +175,7 @@ public final class Piece {
 
         /** 문자열에서 PieceKind 파싱 */
         public static PieceKind fromString(String s) {
-            if (s == null) return CUSTOM;
+            if (s == null) throw new IllegalArgumentException("기물 이름이 null입니다");
             switch (s.toLowerCase()) {
                 case "pawn": return PAWN;
                 case "king": return KING;
@@ -208,7 +196,7 @@ public final class Piece {
                 case "cannon": return CANNON;
                 case "bouncingbishop": return BOUNCING_BISHOP;
                 case "experiment": return EXPERIMENT;
-                default: return CUSTOM;
+                default: throw new IllegalArgumentException("알 수 없는 기물: " + s);
             }
         }
     }
@@ -233,55 +221,72 @@ public final class Piece {
     public static final class PieceData {
         public final String id;
         public PieceKind kind;
-        public final int owner; // 0=백, 1=흑
+        public final int owner; // 0=백, 1=흑, 2=중립
         public Move.Square pos; // null이면 포켓
-        public int stun;
-        public int moveStack;
         public boolean isRoyal;
-        public PieceKind disguise; // nullable
+        public AutoMove autoMove; // nullable — 자동 이동 설정
 
         public PieceData(String id, PieceKind kind, int owner) {
             this.id = id;
             this.kind = kind;
             this.owner = owner;
             this.pos = null;
-            this.stun = 0;
-            this.moveStack = 0;
             this.isRoyal = false;
-            this.disguise = null;
-        }
-
-        /** 실제 행마에 사용되는 기물 종류 (위장 고려) */
-        public PieceKind effectiveKind() {
-            return disguise != null ? disguise : kind;
+            this.autoMove = null;
         }
 
         public int score() { return kind.score(); }
 
         public boolean canMove() {
-            return stun == 0 && moveStack > 0;
+            return pos != null;
         }
 
         public boolean isWhite() {
             return owner == 0;
         }
 
+        public boolean isNeutral() {
+            return owner == 2;
+        }
+
         /** 깊은 복사 */
         public PieceData copy() {
             PieceData c = new PieceData(id, kind, owner);
             c.pos = pos;
-            c.stun = stun;
-            c.moveStack = moveStack;
             c.isRoyal = isRoyal;
-            c.disguise = disguise;
+            c.autoMove = autoMove;
             return c;
         }
 
         @Override
         public String toString() {
             return kind.scriptName() + "(" + id + ") @" + pos
-                    + " stun=" + stun + " ms=" + moveStack
-                    + (isRoyal ? " ROYAL" : "");
+                    + (isRoyal ? " ROYAL" : "")
+                    + (isNeutral() ? " NEUTRAL" : "");
+        }
+    }
+
+    // ── AutoMove (자동 이동 설정) ─────────────────────
+
+    public enum AutoMoveMode {
+        TAKE_MOVE, // 적 기물 잡기 + 빈칸 이동, 그 외 멈춤
+        SHIFT      // 기물과 위치 교환 + 빈칸 이동, 그 외 멈춤
+    }
+
+    public static final class AutoMove {
+        public final int dx;
+        public final int dy;
+        public final AutoMoveMode mode;
+
+        public AutoMove(int dx, int dy, AutoMoveMode mode) {
+            this.dx = dx;
+            this.dy = dy;
+            this.mode = mode;
+        }
+
+        @Override
+        public String toString() {
+            return "AutoMove{" + dx + "," + dy + " " + mode + "}";
         }
     }
 }

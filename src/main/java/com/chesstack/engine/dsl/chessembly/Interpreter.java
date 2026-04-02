@@ -499,6 +499,55 @@ public final class Interpreter {
                     lastValue = false;
                     break;
 
+                // ── 소환 ──────────────────────────────
+                case SUMMON: {
+                    // summon(kind, dx, dy): strArg=kindName, dx/dy=offset
+                    pendingTags.add(new AST.ActionTag(
+                            AST.ActionTagType.SUMMON, "", 0, token.strArg));
+                    lastValue = true;
+                    break;
+                }
+
+                // ── 자동 이동 ─────────────────────────
+                case AUTO_MOVE: {
+                    // auto(dx, dy): take-move 모드 자동 이동 태그
+                    // dx,dy를 key에 인코딩
+                    pendingTags.add(new AST.ActionTag(
+                            AST.ActionTagType.AUTO_MOVE, token.dx + "," + token.dy, 0, null));
+                    lastValue = true;
+                    break;
+                }
+
+                case AUTO_SHIFT: {
+                    // auto-shift(dx, dy): shift 모드 자동 이동 태그
+                    pendingTags.add(new AST.ActionTag(
+                            AST.ActionTagType.AUTO_MOVE, token.dx + "," + token.dy, 1, null));
+                    lastValue = true;
+                    break;
+                }
+
+                // ── 히스토리 조건 ─────────────────────
+                case HISTORY_MOVED: {
+                    // history-moved(kindName): 해당 종류 기물이 이동한 적 있는지
+                    lastValue = board.hasKindMoved(token.strArg);
+                    break;
+                }
+
+                case HISTORY_EXISTS: {
+                    // history-exists(fromX, fromY, toX, toY): strArg에 "fx,fy,tx,ty" 인코딩
+                    String[] parts = token.strArg.split(",");
+                    if (parts.length == 4) {
+                        lastValue = board.hasMoveExists(
+                                Integer.parseInt(parts[0].trim()),
+                                Integer.parseInt(parts[1].trim()),
+                                Integer.parseInt(parts[2].trim()),
+                                Integer.parseInt(parts[3].trim()));
+                    } else {
+                        lastValue = false;
+                    }
+                    break;
+                }
+
                 default:
                     break;
             }

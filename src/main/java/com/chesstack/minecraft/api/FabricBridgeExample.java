@@ -27,13 +27,6 @@ public final class FabricBridgeExample {
     public void onChessBoardInteract() {
         activeGameId = engine.createGame();
         System.out.println("[ChessStack] 새 게임 시작: " + activeGameId);
-
-        engine.loadDSLPiece("phoenix",
-                "take-move(1, 1) repeat(1); take-move(-1, 1) repeat(1);"
-                + " take-move(1, -1) repeat(1); take-move(-1, -1) repeat(1);"
-                + " take-move(2, 0); take-move(-2, 0); take-move(0, 2); take-move(0, -2);");
-
-        System.out.println("[ChessStack] 커스텀 기물 'phoenix' 로드 완료");
         printBoard();
     }
 
@@ -126,5 +119,16 @@ public final class FabricBridgeExample {
         bridge.onMoveConfirm(4, 0, 4, 1);
         bridge.onEndTurn();
         bridge.onPieceSelect(4, 7);
+
+        // ── 테스트 모드 데모 ──
+        System.out.println("\n[ChessStack] === 테스트 모드 ===");
+        TestMode tm = bridge.engine.createTestMode(bridge.activeGameId);
+        tm.setTarget("rook", true, 3, 3);
+        tm.addPiece("pawn", false, 4, 5);
+        List<Move.LegalMove> testMoves = tm.execute();
+        System.out.println("[ChessStack] 테스트 결과: " + testMoves.size() + "개 이동 가능");
+        for (Move.LegalMove m : testMoves) {
+            System.out.printf("  → %s (%s)%n", m.to.toNotation(), m.moveType);
+        }
     }
 }

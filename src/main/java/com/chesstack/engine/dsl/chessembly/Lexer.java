@@ -172,6 +172,29 @@ public final class Lexer {
             case "transition":
                 if (args.size() >= 1) return new AST.Token(AST.TokenType.TRANSITION, args.get(0));
                 return new AST.Token(AST.TokenType.END);
+            // 소환·자동이동
+            case "summon":
+                // summon(kindName, dx, dy)
+                if (args.size() >= 3)
+                    return new AST.Token(AST.TokenType.SUMMON, parseInt(args.get(1)), parseInt(args.get(2)), args.get(0), 0);
+                return new AST.Token(AST.TokenType.END);
+            case "auto":
+                // auto(dx, dy) — take-move 모드
+                p = xy(args); return new AST.Token(AST.TokenType.AUTO_MOVE, p[0], p[1]);
+            case "auto-shift":
+                // auto-shift(dx, dy) — shift 모드
+                p = xy(args); return new AST.Token(AST.TokenType.AUTO_SHIFT, p[0], p[1]);
+            // 히스토리 조건
+            case "history-moved":
+                // history-moved(kindName) — 해당 종류가 이동한 적 있는지
+                if (args.size() >= 1) return new AST.Token(AST.TokenType.HISTORY_MOVED, args.get(0));
+                return new AST.Token(AST.TokenType.END);
+            case "history-exists":
+                // history-exists(fromX, fromY, toX, toY) — 특정 좌표 간 이동 존재 여부
+                if (args.size() >= 4)
+                    return new AST.Token(AST.TokenType.HISTORY_EXISTS, 0, 0,
+                            args.get(0) + "," + args.get(1) + "," + args.get(2) + "," + args.get(3), 0);
+                return new AST.Token(AST.TokenType.END);
             // 제어
             case "repeat":
                 return new AST.Token(AST.TokenType.REPEAT, 0, 0, null,

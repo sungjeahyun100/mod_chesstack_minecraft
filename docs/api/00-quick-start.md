@@ -359,7 +359,7 @@ public class SimpleAI {
 }
 ```
 
-### 시나リ오 5: 게임 저장/로드
+### 시나리오 5: 게임 저장/로드
 
 ```java
 import com.google.gson.Gson;
