@@ -269,13 +269,16 @@ class DSLTests {
     @Test
     void testSummonTag() {
         Interpreter interp = new Interpreter();
-        interp.parse("summon(pawn, 1, 0) take-move(0, 1);");
+        interp.parse("summon(pawn, 1, 0);");
         BuiltinOps.BoardState board = makeEmptyBoard();
         List<Activation> acts = interp.execute(board);
 
+        // 행마식: 빈 칸 (1,0)에 🔵 활성화, MoveType.SUMMON
         assertEquals(1, acts.size());
-        assertTrue(acts.get(0).tags.stream()
-                .anyMatch(t -> t.tagType == ActionTagType.SUMMON && "pawn".equals(t.pieceName)));
+        assertEquals(1, acts.get(0).dx);
+        assertEquals(0, acts.get(0).dy);
+        assertEquals(MoveType.SUMMON, acts.get(0).moveType);
+        assertEquals("pawn", acts.get(0).strArg);
     }
 
     // ── 자동 이동 테스트 ───────────────────────────────────
@@ -283,25 +286,29 @@ class DSLTests {
     @Test
     void testAutoMoveTag() {
         Interpreter interp = new Interpreter();
-        interp.parse("auto(0, 1) take-move(1, 0);");
+        interp.parse("auto(1, 0);");
         BuiltinOps.BoardState board = makeEmptyBoard();
         List<Activation> acts = interp.execute(board);
 
+        // 행마식: MoveType.AUTO_MOVE로 빈 칸 (1,0)에 🔵 활성화
         assertEquals(1, acts.size());
-        assertTrue(acts.get(0).tags.stream()
-                .anyMatch(t -> t.tagType == ActionTagType.AUTO_MOVE && "0,1".equals(t.key)));
+        assertEquals(1, acts.get(0).dx);
+        assertEquals(0, acts.get(0).dy);
+        assertEquals(MoveType.AUTO_MOVE, acts.get(0).moveType);
     }
 
     @Test
     void testAutoShiftTag() {
         Interpreter interp = new Interpreter();
-        interp.parse("auto-shift(1, 0) take-move(0, 1);");
+        interp.parse("auto-shift(1, 0);");
         BuiltinOps.BoardState board = makeEmptyBoard();
         List<Activation> acts = interp.execute(board);
 
+        // 행마식: MoveType.AUTO_SHIFT로 (1,0)에 🔵 활성화
         assertEquals(1, acts.size());
-        assertTrue(acts.get(0).tags.stream()
-                .anyMatch(t -> t.tagType == ActionTagType.AUTO_MOVE && "1,0".equals(t.key) && t.value == 1));
+        assertEquals(1, acts.get(0).dx);
+        assertEquals(0, acts.get(0).dy);
+        assertEquals(MoveType.AUTO_SHIFT, acts.get(0).moveType);
     }
 
     // ── 히스토리 조건 테스트 ───────────────────────────────

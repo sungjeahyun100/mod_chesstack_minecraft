@@ -55,7 +55,7 @@ public final class MoveGenerator {
             boolean isCapture = state.getBoard().contains(target);
 
             legalMoves.add(new Move.LegalMove(
-                    pos, target, act.moveType, isCapture, act.tags, catchTo));
+                    pos, target, act.moveType, isCapture, act.tags, catchTo, act.strArg));
         }
 
         return legalMoves;

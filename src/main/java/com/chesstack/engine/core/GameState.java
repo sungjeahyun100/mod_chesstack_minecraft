@@ -273,6 +273,15 @@ public final class GameState {
             case JUMP:
                 if (!targetEmpty) throw new IllegalStateException("Jump는 빈 칸으로만 이동할 수 있습니다");
                 break;
+            case SUMMON:
+                if (!targetEmpty) throw new IllegalStateException("Summon은 빈 칸에만 소환할 수 있습니다");
+                break;
+            case AUTO_MOVE:
+                if (hasFriendly) throw new IllegalStateException("아군 기물이 있는 칸으로 이동할 수 없습니다");
+                break;
+            case AUTO_SHIFT:
+                // 빈 칸/기물 있는 칸 모두 허용
+                break;
         }
     }
 
@@ -346,6 +355,54 @@ public final class GameState {
                 }
                 break;
             }
+            case SUMMON: {
+                // 기물을 이동하지 않고, 대상 칸에 새 기물을 소환
+                if (mv.strArg != null) {
+                    Piece.PieceKind summonKind = Piece.PieceKind.fromString(mv.strArg);
+                    Piece.PieceData summoned = createPiece(summonKind, turn);
+                    summoned.pos = to;
+                    pieces.put(summoned.id, summoned);
+                    board.put(to, summoned.id);
+                }
+                break;
+            }
+            case AUTO_MOVE: {
+                // take-move처럼 이동/잡기 + 자동 이동 설정
+                String victimId = board.get(to);
+                if (victimId != null) {
+                    capturedId = victimId;
+                    capture(pieceId, victimId);
+                }
+                board.remove(from);
+                board.put(to, pieceId);
+                piece.pos = to;
+                // auto-move 방향 설정 (dx, dy = to - from)
+                int adx = to.x - from.x;
+                int ady = to.y - from.y;
+                piece.autoMove = new Piece.AutoMove(adx, ady, Piece.AutoMoveMode.TAKE_MOVE);
+                break;
+            }
+            case AUTO_SHIFT: {
+                // shift처럼 자리 바꾸기 + 자동 이동 설정 (빈 칸이면 단순 이동)
+                String targetPid = board.get(to);
+                if (targetPid != null) {
+                    board.remove(from);
+                    board.remove(to);
+                    board.put(from, targetPid);
+                    board.put(to, pieceId);
+                    piece.pos = to;
+                    Piece.PieceData tp = pieces.get(targetPid);
+                    if (tp != null) tp.pos = from;
+                } else {
+                    board.remove(from);
+                    board.put(to, pieceId);
+                    piece.pos = to;
+                }
+                int adx = to.x - from.x;
+                int ady = to.y - from.y;
+                piece.autoMove = new Piece.AutoMove(adx, ady, Piece.AutoMoveMode.SHIFT);
+                break;
+            }
         }
 
         // 이동 히스토리 기록
@@ -384,35 +441,6 @@ public final class GameState {
                 case SET_STATE:
                     globalState.put(tag.key, tag.value);
                     break;
-                case SUMMON: {
-                    if (tag.pieceName != null) {
-                        Piece.PieceData acting = pieces.get(pieceId);
-                        if (acting != null) {
-                            int summonX = acting.pos.x + tag.value;
-                            int summonY = acting.pos.y + (tag.key != null ? Integer.parseInt(tag.key) : 0);
-                            Move.Square summonPos = new Move.Square(summonX, summonY);
-                            if (summonPos.isValid() && !board.contains(summonPos)) {
-                                Piece.PieceKind summonKind = Piece.PieceKind.fromString(tag.pieceName);
-                                Piece.PieceData summoned = createPiece(summonKind, turn);
-                                summoned.pos = summonPos;
-                                pieces.put(summoned.id, summoned);
-                                board.put(summonPos, summoned.id);
-                            }
-                        }
-                    }
-                    break;
-                }
-                case AUTO_MOVE: {
-                    Piece.PieceData p = pieces.get(pieceId);
-                    if (p != null && tag.pieceName != null) {
-                        Piece.AutoMoveMode mode = "shift".equals(tag.pieceName)
-                                ? Piece.AutoMoveMode.SHIFT
-                                : Piece.AutoMoveMode.TAKE_MOVE;
-                        p.autoMove = new Piece.AutoMove(tag.value,
-                                tag.key != null ? Integer.parseInt(tag.key) : 0, mode);
-                    }
-                    break;
-                }
             }
         }
     }

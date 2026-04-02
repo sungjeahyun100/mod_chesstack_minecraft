@@ -16,15 +16,16 @@ public final class AST {
         TAKE,      // 잡기만 (적 있을 때)
         CATCH,     // 제자리에서 잡기 (원거리)
         SHIFT,     // 자리 바꾸기
-        JUMP       // take 후 점프
+        JUMP,      // take 후 점프
+        SUMMON,    // 기물 소환 (빈 칸에 소환)
+        AUTO_MOVE, // 자동 이동 (take-move 모드)
+        AUTO_SHIFT // 자동 이동 (shift 모드)
     }
 
     // ── ActionTagType ─────────────────────────────────
     public enum ActionTagType {
         TRANSITION, // 기물 변환
-        SET_STATE,  // 전역 상태 설정
-        SUMMON,     // 기물 소환
-        AUTO_MOVE   // 자동 이동 설정
+        SET_STATE   // 전역 상태 설정
     }
 
     // ── ActionTag ─────────────────────────────────────
@@ -71,13 +72,19 @@ public final class AST {
         public final MoveType moveType;
         public final List<ActionTag> tags;
         public final int[] catchTo; // null이면 해당 없음, [dx, dy] offsets
+        public final String strArg; // SUMMON: 소환할 기물 이름
 
         public Activation(int dx, int dy, MoveType moveType, List<ActionTag> tags, int[] catchTo) {
+            this(dx, dy, moveType, tags, catchTo, null);
+        }
+
+        public Activation(int dx, int dy, MoveType moveType, List<ActionTag> tags, int[] catchTo, String strArg) {
             this.dx = dx;
             this.dy = dy;
             this.moveType = moveType;
             this.tags = tags != null ? new ArrayList<>(tags) : new ArrayList<>();
             this.catchTo = catchTo;
+            this.strArg = strArg;
         }
 
         @Override

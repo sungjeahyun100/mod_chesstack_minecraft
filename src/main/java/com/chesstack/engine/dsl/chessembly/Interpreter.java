@@ -499,30 +499,51 @@ public final class Interpreter {
                     lastValue = false;
                     break;
 
-                // ── 소환 ──────────────────────────────
+                // ── 소환 (행마식) ─────────────────────
                 case SUMMON: {
-                    // summon(kind, dx, dy): strArg=kindName, dx/dy=offset
-                    pendingTags.add(new AST.ActionTag(
-                            AST.ActionTagType.SUMMON, "", 0, token.strArg));
-                    lastValue = true;
+                    // summon(kind, dx, dy): 빈 칸이면 🔵 활성화, 기준 위치 이동
+                    int tx = board.pieceX + anchorX + token.dx;
+                    int ty = board.pieceY + anchorY + token.dy;
+                    if (board.isEmpty(tx, ty)) {
+                        addActivation(activations, anchorX + token.dx, anchorY + token.dy,
+                                AST.MoveType.SUMMON, pendingTags, null, token.strArg);
+                        anchorX += token.dx; anchorY += token.dy;
+                        lastValue = true;
+                    } else {
+                        lastValue = false;
+                    }
                     break;
                 }
 
-                // ── 자동 이동 ─────────────────────────
+                // ── 자동 이동 (행마식: take-move 모드) ─
                 case AUTO_MOVE: {
-                    // auto(dx, dy): take-move 모드 자동 이동 태그
-                    // dx,dy를 key에 인코딩
-                    pendingTags.add(new AST.ActionTag(
-                            AST.ActionTagType.AUTO_MOVE, token.dx + "," + token.dy, 0, null));
-                    lastValue = true;
+                    // auto(dx, dy): take-move처럼 🔵 활성화, 기준 위치 이동
+                    int tx = board.pieceX + anchorX + token.dx;
+                    int ty = board.pieceY + anchorY + token.dy;
+                    if (!board.inBounds(tx, ty) || board.hasFriendly(tx, ty)) {
+                        lastValue = false;
+                    } else {
+                        addActivation(activations, anchorX + token.dx, anchorY + token.dy,
+                                AST.MoveType.AUTO_MOVE, pendingTags, null);
+                        anchorX += token.dx; anchorY += token.dy;
+                        lastValue = !board.hasEnemy(tx, ty); // 적 잡으면 체인 중단
+                    }
                     break;
                 }
 
+                // ── 자동 이동 (행마식: shift 모드) ─────
                 case AUTO_SHIFT: {
-                    // auto-shift(dx, dy): shift 모드 자동 이동 태그
-                    pendingTags.add(new AST.ActionTag(
-                            AST.ActionTagType.AUTO_MOVE, token.dx + "," + token.dy, 1, null));
-                    lastValue = true;
+                    // auto-shift(dx, dy): 빈 칸/기물 있는 칸 모두 🔵 활성화, 벽만 false
+                    int tx = board.pieceX + anchorX + token.dx;
+                    int ty = board.pieceY + anchorY + token.dy;
+                    if (board.inBounds(tx, ty)) {
+                        addActivation(activations, anchorX + token.dx, anchorY + token.dy,
+                                AST.MoveType.AUTO_SHIFT, pendingTags, null);
+                        anchorX += token.dx; anchorY += token.dy;
+                        lastValue = true;
+                    } else {
+                        lastValue = false;
+                    }
                     break;
                 }
 
@@ -561,9 +582,15 @@ public final class Interpreter {
     private void addActivation(List<AST.Activation> list,
                                int dx, int dy, AST.MoveType moveType,
                                List<AST.ActionTag> tags, int[] catchTo) {
+        addActivation(list, dx, dy, moveType, tags, catchTo, null);
+    }
+
+    private void addActivation(List<AST.Activation> list,
+                               int dx, int dy, AST.MoveType moveType,
+                               List<AST.ActionTag> tags, int[] catchTo, String strArg) {
         if (debug) {
             System.out.printf("    → Activation(%d, %d) %s%n", dx, dy, moveType);
         }
-        list.add(new AST.Activation(dx, dy, moveType, tags, catchTo));
+        list.add(new AST.Activation(dx, dy, moveType, tags, catchTo, strArg));
     }
 }

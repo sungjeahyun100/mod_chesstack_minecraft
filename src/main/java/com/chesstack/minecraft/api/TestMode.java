@@ -121,7 +121,7 @@ public final class TestMode {
                     BuiltinOps.BoardState.key(target.x, target.y));
 
             results.add(new Move.LegalMove(
-                    pos, target, act.moveType, isCapture, act.tags, catchTo));
+                    pos, target, act.moveType, isCapture, act.tags, catchTo, act.strArg));
         }
 
         return results;

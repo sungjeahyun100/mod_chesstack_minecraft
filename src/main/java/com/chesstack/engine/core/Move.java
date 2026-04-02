@@ -70,15 +70,22 @@ public final class Move {
         public final boolean isCapture;
         public final List<AST.ActionTag> tags;
         public final Square catchTo; // jump용 잡기 위치
+        public final String strArg;  // SUMMON: 소환할 기물 이름
 
         public LegalMove(Square from, Square to, AST.MoveType moveType,
                          boolean isCapture, List<AST.ActionTag> tags, Square catchTo) {
+            this(from, to, moveType, isCapture, tags, catchTo, null);
+        }
+
+        public LegalMove(Square from, Square to, AST.MoveType moveType,
+                         boolean isCapture, List<AST.ActionTag> tags, Square catchTo, String strArg) {
             this.from = from;
             this.to = to;
             this.moveType = moveType;
             this.isCapture = isCapture;
             this.tags = tags != null ? new ArrayList<>(tags) : new ArrayList<>();
             this.catchTo = catchTo;
+            this.strArg = strArg;
         }
 
         @Override
