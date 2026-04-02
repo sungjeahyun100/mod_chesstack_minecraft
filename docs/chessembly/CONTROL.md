@@ -298,3 +298,65 @@ do peek(0, -1) while friendly(0, 0) move(0, -1) repeat(1);
 7. 6을 반복
 
 (1~7 을 동서남북으로 4번씩 실행)
+
+## 3.5 Summon & Auto-move
+
+### 1. `summon(kind, dx, dy)` (소환)
+
+`summon`은 `set-state`나 `transition`처럼 **수식어(Modifier)** 역할을 합니다.
+
+이 식 **이후에** 활성화되는 모든 칸(🔵)에 "클릭 시 `(dx, dy)` 위치에 `kind` 기물을 소환"하는 액션 태그를 부착합니다.
+
+```less
+# 이동하면서 (1, 0) 위치에 pawn을 소환
+summon(pawn, 1, 0) take-move(0, 1);
+```
+
+소환된 기물은 현재 플레이어 소유의 기물로 배치됩니다.
+
+### 2. `auto(dx, dy)` (자동 이동)
+
+`auto`는 수식어 역할을 합니다.
+
+이 식 **이후에** 활성화되는 모든 칸(🔵)에 "클릭 시 해당 기물에 `(dx, dy)` 방향 자동 이동(take-move 모드)을 설정"하는 액션 태그를 부착합니다.
+
+자동 이동이 설정된 기물은 매 턴 종료 시 자동으로 해당 방향으로 `take-move` 동작을 수행합니다.
+
+```less
+# 이동하면, 이후 매 턴마다 (0, 1) 방향으로 자동 이동
+auto(0, 1) take-move(1, 0);
+```
+
+### 3. `auto-shift(dx, dy)` (자동 자리 바꾸기)
+
+`auto-shift`는 `auto`와 동일하지만, `take-move` 모드 대신 `shift` 모드로 자동 이동을 설정합니다.
+
+```less
+# 이동하면, 이후 매 턴마다 (1, 0) 방향으로 shift 자동 이동
+auto-shift(1, 0) take-move(0, 1);
+```
+
+## 3.6 History
+
+게임의 이동 기록(History)을 참조하는 조건식입니다. 캐슬링과 같이 "특정 기물이 이동한 적이 있는가"를 확인해야 하는 규칙에 사용됩니다.
+
+### 1. `history-moved(kind)` (기물 이동 이력)
+
+`history-moved`는 조건식입니다. 해당 종류(`kind`)의 기물이 게임 중 한 번이라도 이동한 적이 있으면 `true`를 반환합니다.
+
+```less
+# 킹이 이동한 적이 없을 때만 캐슬링 허용
+history-moved(king) not
+    move(2, 0);
+```
+
+### 2. `history-exists(fromX, fromY, toX, toY)` (특정 이동 존재 여부)
+
+`history-exists`는 조건식입니다. 특정 좌표에서 특정 좌표로의 이동이 게임 기록에 존재하면 `true`를 반환합니다.
+
+```less
+# (4, 0)에서 (4, 1)로의 이동이 있었다면
+history-exists(4, 0, 4, 1) take-move(0, 1);
+```
+
+> `history-moved`와 `history-exists`는 모두 **일반 식**이므로, `false`를 반환하면 식 연쇄가 종료됩니다. `not`을 뒤에 붙여 반전할 수 있습니다.

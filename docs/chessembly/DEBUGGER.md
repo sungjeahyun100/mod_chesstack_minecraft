@@ -2,25 +2,19 @@
 
 ## 개요
 
-Chessembly 인터프리터에 내장된 디버거를 사용하면 웹 개발자 도구에서 실행되는 모든 토큰을 추적할 수 있습니다.
+Chessembly 인터프리터에 내장된 디버거를 사용하면 실행되는 모든 토큰을 추적할 수 있습니다.
 
 ## 활성화 방법
 
-### 1. 웹 UI에서 활성화
+### Java 코드에서 활성화
 
-1. 게임을 실행합니다 (http://localhost:8080)
-2. 브라우저 개발자 도구를 엽니다 (F12)
-3. `🐛 디버그` 버튼을 클릭합니다
-4. 콘솔에 다음 메시지가 표시됩니다:
-   ```
-   [Chessembly Debug] ENABLED
-   ```
+```java
+Interpreter interpreter = new Interpreter();
+interpreter.setDebug(true);  // 디버그 활성화
 
-### 2. JavaScript에서 직접 활성화
-
-```javascript
-game.set_debug(true);  // 활성화
-game.set_debug(false); // 비활성화
+interpreter.parse(script);
+List<AST.Activation> activations = interpreter.execute(board);
+// 실행 중 표준 출력(System.out)에 상세 로그가 출력됩니다.
 ```
 
 ## 디버그 출력 예시
@@ -50,9 +44,17 @@ game.set_debug(false); // 비활성화
   - `TakeMove(dx, dy)`: 이동/잡기 행마
   - `Move(dx, dy)`: 이동만
   - `Take(dx, dy)`: 잡기만
+  - `Catch(dx, dy)`: 제자리에서 잡기
+  - `Shift(dx, dy)`: 자리 바꾸기
+  - `Jump(dx, dy)`: take 후 점프
   - `Repeat(n)`: 반복
   - `Observe(dx, dy)`: 관찰 (조건)
   - `While`: do-while 루프
+  - `Summon(kind)`: 기물 소환 (수식어)
+  - `Auto(dx, dy)`: 자동 이동 설정 (수식어)
+  - `AutoShift(dx, dy)`: 자동 shift 설정 (수식어)
+  - `HistoryMoved(kind)`: 기물 이동 이력 조건
+  - `HistoryExists(coords)`: 특정 이동 존재 조건
   - 등등...
 - **Anchor**: 현재 앵커 위치 (누적 오프셋)
 - **LastValue**: 마지막 실행 결과 (true/false)
@@ -128,47 +130,30 @@ game.set_debug(false); // 비활성화
 4. **활성화 검증**: 예상한 칸에 `Activation`이 추가되는지 확인
 5. **성능 측정**: 디버그 모드는 성능에 영향을 줄 수 있으므로 필요할 때만 활성화
 
-## Rust 코드에서 사용
+## Java 코드에서 사용
 
-Rust 테스트나 엔진 코드에서도 디버그 모드를 사용할 수 있습니다:
-
-```rust
-let mut interpreter = Interpreter::new();
-interpreter.set_debug(true);  // 디버그 활성화
+```java
+Interpreter interpreter = new Interpreter();
+interpreter.setDebug(true);  // 디버그 활성화
 interpreter.parse(script);
-let activations = interpreter.execute(&mut board);
+
+BuiltinOps.BoardState board = new BuiltinOps.BoardState(8, 8, 3, 3, "rook", true);
+List<AST.Activation> activations = interpreter.execute(board);
 ```
 
-또는 GameState에서:
+## 출력 대상
 
-```rust
-let mut state = GameState::new(0);
-state.debug_mode = true;  // 모든 행마법 계산에서 디버그 활성화
-```
-
-## 출력 제어
-
-- WASM 환경: `console.log`로 출력
-- Native 환경: `println!`으로 출력 (테스트 등)
+디버그 모드의 로그는 `System.out.printf()`를 통해 표준 출력에 기록됩니다.
 
 ## 문제 해결
 
 ### 디버그 출력이 보이지 않는 경우
 
-1. 브라우저 개발자 도구가 열려있는지 확인
-2. 콘솔 탭이 선택되어 있는지 확인
-3. 로그 레벨이 "모두 표시"로 설정되어 있는지 확인
-4. `game.set_debug(true)`가 실행되었는지 확인
+1. `interpreter.setDebug(true)`가 `execute()` 호출 전에 실행되었는지 확인
+2. 표준 출력이 리다이렉트되지 않았는지 확인
+3. 테스트 프레임워크의 출력 캡처 설정 확인
 
 ### 너무 많은 로그가 출력되는 경우
 
 1. 복잡한 기물(Queen, Amazon 등)은 많은 토큰을 실행합니다
 2. 필요한 경우에만 디버그 모드를 활성화하세요
-3. 콘솔 필터를 사용하여 특정 메시지만 표시하세요
-
-## 향후 개선 사항
-
-- [ ] 중단점(breakpoint) 기능
-- [ ] 단계별 실행(step)
-- [ ] 변수 감시(watch)
-- [ ] 실행 통계(performance profiling)

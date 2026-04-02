@@ -50,7 +50,7 @@ board.put(e4, "piece_1");
 String pieceId = board.get(e4); // "piece_1"
 
 // 기물 존재 확인
-boolean haspiece = board.contains(e4); // true
+boolean hasPiece = board.contains(e4); // true
 
 // 기물 제거
 board.remove(e4);
@@ -63,7 +63,7 @@ Map<Move.Square, String> allPieces = board.asMap();
 
 ## GameState
 
-`GameState`는 게임의 전체 상태를 관리하는 핵심 클래스입니다. 보드, 포켓, 기물 정보, 턴 관리, 승리 조건 확인 등을 담당합니다.
+`GameState`는 게임의 전체 상태를 관리하는 핵심 클래스입니다. 보드, 포켓, 기물 정보, 턴 관리, 승리 조건 확인, 중립 기물, 자동 이동, 이동 히스토리 등을 담당합니다.
 
 ### 생성 및 초기화
 
@@ -81,7 +81,7 @@ state.setupExperimentalPocket();
 ### 포켓 관리
 
 ```java
-// 커스텀 포켓 설정 (점수 제한 검증)
+// 커스텀 포켓 설정 (점수 제한 검증, 최대 39점)
 List<Piece.PieceSpec> pocket = Arrays.asList(
     new Piece.PieceSpec(Piece.PieceKind.QUEEN),
     new Piece.PieceSpec(Piece.PieceKind.ROOK),
@@ -108,9 +108,22 @@ String pieceId = state.placePiece(0, Piece.PieceKind.KNIGHT, target);
 
 // 착수 시 자동으로:
 // - 포켓에서 기물 제거
-// - 착수 스턴 적용
-// - 초기 이동 스택 설정
+// - 보드에 기물 배치
 // - actionTaken = true
+```
+
+### 중립 기물 배치
+
+```java
+// 중립 기물 배치 (owner=2, 양측 모두에게 아군으로 취급)
+// 포켓 불필요, 직접 보드에 배치
+String neutralId = state.placeNeutralPiece(Piece.PieceKind.ROOK, new Move.Square(3, 3));
+
+// 중립 기물 특성:
+// - 어느 플레이어든 이동 가능
+// - enemy() 조건에서 적이 아님
+// - friendly() 조건에서 아군으로 판정
+// - 계승(crown) 불가
 ```
 
 ### 기물 이동
@@ -130,6 +143,10 @@ for (Move.LegalMove move : legalMoves) {
         break;
     }
 }
+
+// 이동 유효성 확인
+boolean valid = state.isValidMove("piece_1", from, to);
+boolean validAt = state.isValidMoveAt(from, to);
 ```
 
 ### 기물 조회
@@ -144,6 +161,9 @@ Piece.PieceData piece = state.getPiece("piece_1");
 
 // 보드 위 모든 기물 조회
 List<Piece.PieceData> allPieces = state.getBoardPieces();
+
+// 전체 기물 맵 (포켓 포함)
+Map<String, Piece.PieceData> allMap = state.getAllPieces();
 ```
 
 ### 턴 관리
@@ -152,12 +172,40 @@ List<Piece.PieceData> allPieces = state.getBoardPieces();
 // 현재 턴 조회 (0=백, 1=흑)
 int currentPlayer = state.getTurn();
 
+// 턴 번호 조회
+int turnNum = state.getTurnNumber();
+
 // 턴 종료 → 다음 플레이어로 전환
 state.endTurn();
-// - actionTaken 초기화
-// - activePiece 초기화
-// - stun 감소
-// - 상속 처리
+// - 자동 이동(autoMove) 처리
+// - turn을 상대 플레이어로 전환
+// - turnNumber 증가
+// - activePiece, actionTaken 초기화
+```
+
+### 계승 (Crown)
+
+```java
+// 기물을 로얄 피스(왕족)로 만들기
+state.crownPiece(0, "piece_1"); // 플레이어 0의 기물을 계승
+
+// 제약 조건:
+// - 자신의 턴이어야 함
+// - 이번 턴에 다른 행동을 하지 않았어야 함
+// - 자신의 기물이어야 함 (중립 기물은 계승 불가)
+// - 보드 위에 있는 기물이어야 함
+```
+
+### 프로모션
+
+```java
+// 프로모션 실행
+state.promote("piece_1", Piece.PieceKind.QUEEN);
+
+// 제약 조건:
+// - 프로모션 가능한 기물 (현재 폰만 가능)
+// - 유효한 프로모션 대상 (퀸, 룩, 비숍, 나이트)
+// - 프로모션 칸에 위치해야 함
 ```
 
 ### 승리 조건 확인
@@ -178,17 +226,24 @@ switch (result) {
 }
 ```
 
-### 특수 액션
+### 이동 히스토리
 
 ```java
-// 위장 (Disguise) - 특정 기물을 다른 종류로 위장
-state.disguisePiece("piece_1", Piece.PieceKind.QUEEN);
+// 이동 히스토리 조회
+List<GameState.MoveRecord> history = state.getMoveHistory();
 
-// 계승 (Crown) - 기물을 왕족으로 만들기
-state.crownPiece("piece_1");
+for (GameState.MoveRecord record : history) {
+    System.out.printf("%s(%s): %s → %s (턴 %d)%n",
+        record.pieceKind, record.pieceId,
+        record.from, record.to, record.turnNumber);
+}
 
-// 스턴 (Stun) - 기물 무력화
-state.stunPiece("piece_1");
+// MoveRecord 필드:
+// - pieceId: 이동한 기물 ID
+// - pieceKind: 이동한 기물 종류
+// - from: 출발 좌표
+// - to: 도착 좌표
+// - turnNumber: 이동 시점의 턴 번호
 ```
 
 ### 디버그 모드
@@ -250,12 +305,9 @@ public class CoreAPIExample {
         Move.GameResult result = state.checkVictory();
         System.out.println("게임 상태: " + result);
         
-        // 9. 현재 보드 상태 출력
-        List<Piece.PieceData> pieces = state.getBoardPieces();
-        System.out.println("\n현재 보드:");
-        for (Piece.PieceData p : pieces) {
-            System.out.printf("  %s at %s (소유자: %d, 스턴: %d, 스택: %d)%n",
-                p.kind, p.pos, p.owner, p.stun, p.moveStack);
+        // 9. 이동 히스토리 확인
+        for (GameState.MoveRecord r : state.getMoveHistory()) {
+            System.out.printf("  %s: %s → %s%n", r.pieceKind, r.from, r.to);
         }
     }
 }
@@ -305,25 +357,25 @@ public final Square catchTo;         // jump용 잡기 위치
 AST.MoveType.MOVE      // 빈 칸으로만 이동
 AST.MoveType.TAKE      // 적 기물 칸으로만 이동
 AST.MoveType.TAKE_MOVE // 빈 칸 또는 적 기물 칸
-AST.MoveType.CATCH     // 캡처 전용 (이동 안함)
-AST.MoveType.SHIFT     // 다른 기물이 있는 칸으로 이동
+AST.MoveType.CATCH     // 캡처 전용 (이동 안함, 원거리)
+AST.MoveType.SHIFT     // 자리 바꾸기
 AST.MoveType.JUMP      // 뛰어넘기
 ```
 
 ### Action (플레이어 액션)
 
 ```java
-// 액션 생성
-Move.Action action = new Move.Action(
-    Move.ActionType.PLACE,
-    "piece_1",
-    null,               // from (MOVE만 필요)
-    target,             // to
-    null                // asKind (DISGUISE만 필요)
-);
+// 착수
+Move.Action placeAction = Move.Action.place("piece_1", target);
 
-// 실행
-state.performAction(action);
+// 이동
+Move.Action moveAction = Move.Action.move("piece_1", from, to);
+
+// 계승
+Move.Action crownAction = Move.Action.crown("piece_1");
+
+// 액션 실행
+state.applyAction(action);
 ```
 
 ### ActionType 종류
@@ -331,9 +383,7 @@ state.performAction(action);
 ```java
 ActionType.PLACE    // 착수
 ActionType.MOVE     // 이동
-ActionType.DISGUISE // 위장
 ActionType.CROWN    // 계승
-ActionType.STUN     // 스턴
 ```
 
 ---
@@ -358,14 +408,15 @@ Piece.PieceKind.AMAZON         // 퀸 + 나이트
 Piece.PieceKind.GRASSHOPPER    // 호퍼
 Piece.PieceKind.KNIGHTRIDER    // 연속 나이트
 Piece.PieceKind.ARCHBISHOP     // 비숍 + 나이트
-Piece.PieceKind.DABBABA        // 2칸 직선
-Piece.PieceKind.ALFIL          // 2칸 대각선
+Piece.PieceKind.DABBABA        // 2칸 직선 도약
+Piece.PieceKind.ALFIL          // 2칸 대각선 도약
 Piece.PieceKind.FERZ           // 1칸 대각선
 Piece.PieceKind.CENTAUR        // 킹 + 나이트
-Piece.PieceKind.CAMEL          // (3,1) 점프
-Piece.PieceKind.TEMPEST_ROOK   // 폭풍 룩
-Piece.PieceKind.CANNON         // 캐논
-Piece.PieceKind.BOUNCING_BISHOP // 반사 비숍
+Piece.PieceKind.CAMEL          // (3,1) 도약
+Piece.PieceKind.TEMPEST_ROOK   // 폭풍 룩 (대각 시작 → 직선 분기)
+Piece.PieceKind.CANNON         // 캐논 (포 점프)
+Piece.PieceKind.BOUNCING_BISHOP // 반사 비숍 (벽에서 반사)
+Piece.PieceKind.EXPERIMENT     // 실험용
 ```
 
 ### PieceKind 메서드
@@ -373,6 +424,9 @@ Piece.PieceKind.BOUNCING_BISHOP // 반사 비숍
 ```java
 // 점수 조회
 int score = Piece.PieceKind.QUEEN.score(); // 9
+
+// 스크립트 이름
+String name = Piece.PieceKind.KNIGHT.scriptName(); // "knight"
 
 // Chessembly 행마법 스크립트
 String script = Piece.PieceKind.KNIGHT.chessemblyScript(true); // 백
@@ -385,6 +439,9 @@ boolean canPromote = Piece.PieceKind.PAWN.canPromote(); // true
 List<Piece.PieceKind> targets = Piece.PieceKind.PAWN.promotionTargets();
 // [QUEEN, ROOK, BISHOP, KNIGHT]
 
+// 프로모션 칸 확인
+boolean isPromoSq = Piece.PieceKind.PAWN.isPromotionSquare(sq, true);
+
 // 문자열로 파싱
 Piece.PieceKind kind = Piece.PieceKind.fromString("knight");
 ```
@@ -392,14 +449,8 @@ Piece.PieceKind kind = Piece.PieceKind.fromString("knight");
 ### PieceSpec (포켓용 기물 스펙)
 
 ```java
-// 기본 기물
+// 기물 스펙 생성
 Piece.PieceSpec spec = new Piece.PieceSpec(Piece.PieceKind.QUEEN);
-
-// 위장된 기물 (실제는 PAWN이지만 QUEEN처럼 보임)
-Piece.PieceSpec disguised = new Piece.PieceSpec(
-    Piece.PieceKind.PAWN,
-    Piece.PieceKind.QUEEN
-);
 
 // 점수 조회
 int score = spec.score(); // kind 기준
@@ -409,20 +460,31 @@ int score = spec.score(); // kind 기준
 
 ```java
 // 필드
-public String id;              // 고유 ID
-public Piece.PieceKind kind;   // 실제 종류
-public int owner;              // 소유자 (0=백, 1=흑)
-public Move.Square pos;        // 위치
-public int stun;               // 스턴 스택
-public int moveStack;          // 이동 스택
-public boolean isRoyal;        // 왕족 여부
-public Piece.PieceKind disguiseAs; // 위장 종류
+public final String id;           // 고유 ID
+public PieceKind kind;             // 기물 종류
+public final int owner;            // 소유자 (0=백, 1=흑, 2=중립)
+public Move.Square pos;            // 위치 (null이면 포켓)
+public boolean isRoyal;            // 왕족 여부
+public AutoMove autoMove;          // 자동 이동 설정 (nullable)
 
 // 유틸리티 메서드
-boolean canMove = piece.canMove(); // stun == 0 && moveStack > 0
-boolean isWhite = piece.isWhite(); // owner == 0
+boolean canMove = piece.canMove();   // pos != null
+boolean isWhite = piece.isWhite();   // owner == 0
+boolean isNeutral = piece.isNeutral(); // owner == 2
 int score = piece.score();
-Piece.PieceKind effectiveKind = piece.effectiveKind(); // 위장 고려
+```
+
+### AutoMove (자동 이동)
+
+```java
+// AutoMoveMode
+Piece.AutoMoveMode.TAKE_MOVE  // 빈 칸 이동 / 적 잡기, 그 외 멈춤
+Piece.AutoMoveMode.SHIFT      // 빈 칸 이동 / 기물과 위치 교환, 그 외 멈춤
+
+// AutoMove 필드
+public final int dx;                 // X 방향
+public final int dy;                 // Y 방향
+public final AutoMoveMode mode;      // 모드
 ```
 
 ### 예제: 커스텀 포켓
@@ -457,25 +519,10 @@ RuleSet.BOARD_HEIGHT  // 8
 // 점수 제한
 RuleSet.MAX_POCKET_SCORE  // 39
 
-// 플레이어
-RuleSet.WHITE  // 0
-RuleSet.BLACK  // 1
-```
-
-### 유틸리티 메서드
-
-```java
-// 점수 기반 초기 이동 스택 계산
-int stack = RuleSet.initialMoveStack(score);
-// 1-2점 → 5스택
-// 3-5점 → 3스택
-// 6-7점 → 2스택
-// 8점 이상 → 1스택
-
-// 착수 시 스턴 계산
-int stun = RuleSet.calculatePlacementStun(piece, square);
-// 프로모션 기물: 프로모션 거리에 비례
-// 일반 기물: score() 값
+// 플레이어 ID
+RuleSet.WHITE    // 0
+RuleSet.BLACK    // 1
+RuleSet.NEUTRAL  // 2
 ```
 
 ---
@@ -504,16 +551,16 @@ public class CompleteExample {
             int player = game.getTurn();
             String color = player == 0 ? "백" : "흑";
             
-            System.out.println("\n" + color + " 플레이어 턴");
+            System.out.println("\n" + color + " 플레이어 턴 (턴 " + game.getTurnNumber() + ")");
             System.out.println("포켓: " + game.getPocket(player));
-            System.out.println("1=착수, 2=이동, 3=턴 종료: ");
+            System.out.println("1=착수, 2=이동, 3=계승, 4=턴 종료: ");
             
             int choice = scanner.nextInt();
             
             try {
                 if (choice == 1) {
                     // 착수
-                    System.out.print("기물 종류 (예: KNIGHT): ");
+                    System.out.print("기물 종류 (예: knight): ");
                     String kindStr = scanner.next();
                     Piece.PieceKind kind = Piece.PieceKind.fromString(kindStr);
                     
@@ -544,6 +591,13 @@ public class CompleteExample {
                     }
                     
                 } else if (choice == 3) {
+                    // 계승
+                    System.out.print("기물 ID: ");
+                    String pid = scanner.next();
+                    game.crownPiece(player, pid);
+                    System.out.println("계승 완료");
+                    
+                } else if (choice == 4) {
                     game.endTurn();
                 }
                 
@@ -558,8 +612,11 @@ public class CompleteExample {
     static void displayBoard(GameState game) {
         System.out.println("\n현재 보드:");
         for (Piece.PieceData p : game.getBoardPieces()) {
-            String owner = p.owner == 0 ? "백" : "흑";
-            System.out.printf("%s %s at %s%n", owner, p.kind, p.pos);
+            String ownerStr = p.isNeutral() ? "중립" : (p.isWhite() ? "백" : "흑");
+            System.out.printf("  %s %s at %s%s%s%n",
+                ownerStr, p.kind, p.pos,
+                p.isRoyal ? " [ROYAL]" : "",
+                p.autoMove != null ? " [AUTO:" + p.autoMove + "]" : "");
         }
     }
 }

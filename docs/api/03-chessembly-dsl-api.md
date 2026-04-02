@@ -24,6 +24,8 @@ Chessembly는 다음과 같은 특징을 갖습니다:
 - **스택 기반**: 앵커(Anchor) 개념으로 연속 이동 지원
 - **조건부 실행**: 보드 상태에 따른 동적 행마법
 - **제어 흐름**: 반복, 점프, 조건문
+- **소환·자동이동**: 이동 시 추가 기물 소환, 자동 이동 설정
+- **히스토리 조건**: 이동 히스토리를 기반으로 한 조건부 실행
 
 ### Chessembly 파이프라인
 
@@ -36,7 +38,7 @@ Parser: AST 생성
     ↓
 Interpreter: 실행
     ↓
-Activation 목록 (합법 수)
+Activation 목록 (합법 수 + 액션 태그)
 ```
 
 ---
@@ -49,28 +51,64 @@ Activation 목록 (합법 수)
 move(dx, dy)       # 빈 칸으로만 이동
 take(dx, dy)       # 적 기물이 있는 칸으로만 이동
 take-move(dx, dy)  # 빈 칸 또는 적 기물 칸으로 이동
-shift(dx, dy)      # 다른 기물이 있는 칸으로 이동 (아군/적 무관)
-catch(dx, dy)      # 캡처만 (이동하지 않음)
+shift(dx, dy)      # 다른 기물이 있는 칸으로 이동 (위치 교환)
+catch(dx, dy)      # 캡처만 (이동하지 않음, 원거리 잡기)
 jump(dx, dy)       # 뛰어넘기 (마지막 take 위치에서 캡처)
 ```
 
 ### 조건 명령어
 
 ```chessembly
-peek(dx, dy)       # 기물이 있으면 true
-empty(dx, dy)      # 빈 칸이면 true
-enemy(dx, dy)      # 적 기물이 있으면 true
-friendly(dx, dy)   # 아군 기물이 있으면 true
-edge-top(dx, dy)   # 상단 가장자리면 true
-edge-bottom(dx, dy) # 하단 가장자리면 true
-edge-left(dx, dy)  # 좌측 가장자리면 true
-edge-right(dx, dy) # 우측 가장자리면 true
+peek(dx, dy)         # 기물이 있으면 true
+observe(dx, dy)      # (peek과 동일)
+enemy(dx, dy)        # 적 기물이 있으면 true (중립은 적이 아님)
+friendly(dx, dy)     # 아군 기물이 있으면 true (중립은 아군)
+piece-on(name, dx, dy) # 특정 종류의 기물이 있으면 true
+danger(dx, dy)       # 위협받는 칸이면 true
+check                # 체크 상태이면 true
+bound(dx, dy)        # 보드 범위 안이면 true
+edge(dx, dy)         # 보드 가장자리이면 true
+edge-top(dx, dy)     # 상단 가장자리면 true
+edge-bottom(dx, dy)  # 하단 가장자리면 true
+edge-left(dx, dy)    # 좌측 가장자리면 true
+edge-right(dx, dy)   # 우측 가장자리면 true
+corner(dx, dy)       # 코너이면 true
+corner-top-left(dx, dy)     # 좌상단 코너이면 true
+corner-top-right(dx, dy)    # 우상단 코너이면 true
+corner-bottom-left(dx, dy)  # 좌하단 코너이면 true
+corner-bottom-right(dx, dy) # 우하단 코너이면 true
+```
+
+### 상태·소환·자동이동 명령어
+
+```chessembly
+# 상태 관련
+piece(name)              # 현재 기물이 name인지 확인
+if-state(key, value)     # 전역 상태 key == value인지 확인
+set-state(key, value)    # 전역 상태 key를 value으로 설정 (액션 태그)
+set-state-reset(key)     # 전역 상태 key를 0으로 리셋 (액션 태그)
+transition(name)         # 기물 종류를 name으로 변환 (액션 태그)
+
+# 소환 (이동 실행 시 추가 기물을 소환하는 액션 태그)
+summon(kindName, dx, dy) # 현재 위치 기준 (dx, dy) 오프셋에 kindName 기물 소환
+
+# 자동 이동 (이동 실행 시 기물에 자동 이동을 설정하는 액션 태그)
+auto(dx, dy)             # take-move 모드의 자동 이동 설정
+auto-shift(dx, dy)       # shift 모드의 자동 이동 설정
+```
+
+### 히스토리 조건 명령어
+
+```chessembly
+# 이동 히스토리를 기반으로 한 조건
+history-moved(kindName)                # kindName 종류의 기물이 이동한 적이 있으면 true
+history-exists(fromX, fromY, toX, toY) # 특정 좌표 간 이동이 존재하면 true
 ```
 
 ### 제어 흐름
 
 ```chessembly
-repeat(n)          # 이전 명령어를 n번 반복 (0=무한)
+repeat(n)          # 이전 명령어를 n번 반복 (0=무한, 1=무한 반복)
 do ... while       # do-while 루프
 { ... }            # 스코프 (앵커 격리)
 label(n)           # 라벨 정의
@@ -128,17 +166,20 @@ String script = "take-move(1, 0); take-move(0, 1);";
 interpreter.parse(script);
 
 // 4. 보드 상태 생성
-BuiltinOps.BoardState board = new BuiltinOps.BoardState();
-board.ownerColor = BuiltinOps.Color.WHITE;
-// ... 보드 설정
+BuiltinOps.BoardState board = new BuiltinOps.BoardState(
+    8, 8,    // boardWidth, boardHeight
+    3, 3,    // pieceX, pieceY (기물 위치)
+    "knight", // 기물 이름
+    true      // isWhite
+);
 
 // 5. 실행
 List<AST.Activation> activations = interpreter.execute(board);
 
 // 6. 결과 확인
 for (AST.Activation act : activations) {
-    System.out.printf("이동: (%d, %d) - %s%n", 
-        act.dx, act.dy, act.moveType);
+    System.out.printf("이동: (%d, %d) - %s, 태그: %s%n", 
+        act.dx, act.dy, act.moveType, act.tags);
 }
 ```
 
@@ -160,10 +201,7 @@ interpreter.setDebug(true);
 스크립트를 토큰 리스트로 파싱합니다.
 
 ```java
-String script = """
-    move(0, 1) repeat(2);
-    take(1, 1);
-    """;
+String script = "move(0, 1) repeat(2); take(1, 1);";
 
 interpreter.parse(script);
 // 내부적으로 Parser.parse()를 호출하여 Token 리스트 생성
@@ -191,6 +229,7 @@ public List<AST.Activation> execute(BuiltinOps.BoardState board)
 4. **제어식 면제**: `while`, `jmp`, `jne`, `not`, `label`은 종료하지 않음
 5. **스코프 관리**: `{ }`로 앵커 저장/복원
 6. **Activation 수집**: 이동 명령어 성공 시 추가
+7. **액션 태그 수집**: `transition`, `summon`, `auto`, `auto-shift`, `set-state` 등
 
 ---
 
@@ -207,71 +246,21 @@ String script = "move(1, 0); take(1, 1);";
 List<AST.Token> tokens = Parser.parse(script);
 
 for (AST.Token token : tokens) {
-    System.out.println(token.type + " " + token.args);
+    System.out.println(token);
 }
-```
-
-**출력 예:**
-```
-MOVE [1, 0]
-SEMICOLON []
-TAKE [1, 1]
-SEMICOLON []
-```
-
-### 지원하는 토큰 타입
-
-```java
-AST.TokenType.MOVE
-AST.TokenType.TAKE
-AST.TokenType.TAKE_MOVE
-AST.TokenType.SHIFT
-AST.TokenType.CATCH
-AST.TokenType.JUMP
-AST.TokenType.PEEK
-AST.TokenType.EMPTY
-AST.TokenType.ENEMY
-AST.TokenType.FRIENDLY
-AST.TokenType.REPEAT
-AST.TokenType.DO
-AST.TokenType.WHILE
-AST.TokenType.LABEL
-AST.TokenType.JMP
-AST.TokenType.JNE
-AST.TokenType.NOT
-AST.TokenType.OPEN_BRACE
-AST.TokenType.CLOSE_BRACE
-AST.TokenType.SEMICOLON
 ```
 
 ---
 
 ## Lexer
 
-`Lexer`는 문자열을 토큰으로 분해합니다 (내부 사용).
+`Lexer`는 문자열을 원시 토큰으로 분해합니다 (내부 사용).
 
 ```java
 import com.chesstack.engine.dsl.chessembly.Lexer;
 
 Lexer lexer = new Lexer("move(1, 0); take(2, 1);");
-
-while (lexer.hasNext()) {
-    String token = lexer.next();
-    System.out.println("Token: " + token);
-}
-```
-
-**출력 예:**
-```
-Token: move
-Token: (
-Token: 1
-Token: ,
-Token: 0
-Token: )
-Token: ;
-Token: take
-...
+// Parser가 내부적으로 사용
 ```
 
 ---
@@ -280,25 +269,79 @@ Token: take
 
 `AST`는 추상 구문 트리 관련 클래스를 포함합니다.
 
+### TokenType (전체 목록)
+
+```java
+// 행마식
+AST.TokenType.TAKE_MOVE   // take-move(dx, dy)
+AST.TokenType.MOVE        // move(dx, dy)
+AST.TokenType.TAKE        // take(dx, dy)
+AST.TokenType.CATCH       // catch(dx, dy)
+AST.TokenType.SHIFT       // shift(dx, dy)
+AST.TokenType.JUMP        // jump(dx, dy)
+AST.TokenType.ANCHOR      // anchor
+
+// 조건식
+AST.TokenType.OBSERVE     // observe(dx, dy)
+AST.TokenType.PEEK        // peek(dx, dy)
+AST.TokenType.ENEMY       // enemy(dx, dy)
+AST.TokenType.FRIENDLY    // friendly(dx, dy)
+AST.TokenType.PIECE_ON    // piece-on(name, dx, dy)
+AST.TokenType.DANGER      // danger(dx, dy)
+AST.TokenType.CHECK       // check
+AST.TokenType.BOUND       // bound(dx, dy)
+AST.TokenType.EDGE        // edge(dx, dy)
+AST.TokenType.EDGE_TOP    // edge-top(dx, dy)
+AST.TokenType.EDGE_BOTTOM // edge-bottom(dx, dy)
+AST.TokenType.EDGE_LEFT   // edge-left(dx, dy)
+AST.TokenType.EDGE_RIGHT  // edge-right(dx, dy)
+AST.TokenType.CORNER      // corner(dx, dy)
+AST.TokenType.CORNER_TOP_LEFT     // corner-top-left(dx, dy)
+AST.TokenType.CORNER_TOP_RIGHT    // corner-top-right(dx, dy)
+AST.TokenType.CORNER_BOTTOM_LEFT  // corner-bottom-left(dx, dy)
+AST.TokenType.CORNER_BOTTOM_RIGHT // corner-bottom-right(dx, dy)
+
+// 상태
+AST.TokenType.PIECE        // piece(name)
+AST.TokenType.IF_STATE     // if-state(key, value)
+AST.TokenType.SET_STATE    // set-state(key, value)
+AST.TokenType.SET_STATE_RESET // set-state-reset(key)
+AST.TokenType.TRANSITION   // transition(name)
+
+// 소환·자동이동
+AST.TokenType.SUMMON       // summon(kindName, dx, dy)
+AST.TokenType.AUTO_MOVE    // auto(dx, dy)
+AST.TokenType.AUTO_SHIFT   // auto-shift(dx, dy)
+
+// 히스토리 조건
+AST.TokenType.HISTORY_MOVED  // history-moved(kindName)
+AST.TokenType.HISTORY_EXISTS // history-exists(fromX, fromY, toX, toY)
+
+// 제어
+AST.TokenType.REPEAT       // repeat(n)
+AST.TokenType.DO           // do
+AST.TokenType.WHILE        // while
+AST.TokenType.JMP          // jmp(n)
+AST.TokenType.JNE          // jne(n)
+AST.TokenType.LABEL        // label(n)
+AST.TokenType.NOT          // not
+AST.TokenType.END          // end
+
+// 구조
+AST.TokenType.OPEN_BRACE   // {
+AST.TokenType.CLOSE_BRACE  // }
+AST.TokenType.SEMICOLON    // ;
+```
+
 ### Token
 
 ```java
-public static class Token {
-    public TokenType type;
-    public int[] args;      // 숫자 인자
-    public String strArg;   // 문자열 인자
-}
-```
-
-### Activation
-
-```java
-public static class Activation {
-    public int dx;           // 이동 오프셋 X
-    public int dy;           // 이동 오프셋 Y
-    public MoveType moveType; // 이동 타입
-    public List<ActionTag> tags; // 액션 태그
-    public int[] catchTo;    // jump용 캡처 위치
+public static final class Token {
+    public final TokenType type;
+    public final int dx;           // X 오프셋
+    public final int dy;           // Y 오프셋
+    public final String strArg;    // 기물 이름, 라벨, 상태 키 등
+    public final int intArg;       // repeat 횟수, 상태 값 등
 }
 ```
 
@@ -309,18 +352,53 @@ public enum MoveType {
     MOVE,      // 빈 칸으로만
     TAKE,      // 적 칸으로만
     TAKE_MOVE, // 빈 칸 또는 적
-    CATCH,     // 캡처만
-    SHIFT,     // 기물이 있는 칸
+    CATCH,     // 캡처만 (이동 안함)
+    SHIFT,     // 위치 교환
     JUMP       // 뛰어넘기
+}
+```
+
+### ActionTagType
+
+```java
+public enum ActionTagType {
+    TRANSITION, // 기물 변환 (transition(name))
+    SET_STATE,  // 전역 상태 설정 (set-state(key, value))
+    SUMMON,     // 기물 소환 (summon(kindName, dx, dy))
+    AUTO_MOVE   // 자동 이동 설정 (auto(dx, dy) / auto-shift(dx, dy))
 }
 ```
 
 ### ActionTag
 
 ```java
-public enum ActionTag {
-    CAPTURE,   // 캡처 발생
-    JUMP       // 점프 이동
+public static final class ActionTag {
+    public final ActionTagType tagType; // 태그 종류
+    public final String key;            // 상태 키 또는 dy(문자열)
+    public final int value;             // 상태 값 또는 dx
+    public final String pieceName;      // 기물 이름 (nullable)
+}
+
+// 예: summon(knight, 1, 2)
+// → ActionTag(SUMMON, key="2", value=1, pieceName="knight")
+// GameState에서: summonX = pieceX + value, summonY = pieceY + parseInt(key)
+
+// 예: auto(1, 0)
+// → ActionTag(AUTO_MOVE, key="0", value=1, pieceName="take-move")
+
+// 예: auto-shift(0, -1)
+// → ActionTag(AUTO_MOVE, key="-1", value=0, pieceName="shift")
+```
+
+### Activation
+
+```java
+public static final class Activation {
+    public final int dx;               // 이동 오프셋 X
+    public final int dy;               // 이동 오프셋 Y
+    public final MoveType moveType;    // 이동 타입
+    public final List<ActionTag> tags; // 수집된 액션 태그
+    public final int[] catchTo;        // jump용 캡처 위치 [dx, dy] (nullable)
 }
 ```
 
@@ -330,58 +408,114 @@ public enum ActionTag {
 
 `VM`은 Chessembly 가상 머신으로, Interpreter의 실행 로직을 담당합니다 (내부 사용).
 
-```java
-// VM은 주로 Interpreter에서 사용되며,
-// 직접 사용하는 경우는 드뭅니다.
-```
-
 ---
 
 ## BuiltinOps
 
 `BuiltinOps`는 Chessembly 내장 연산과 보드 상태를 정의합니다.
 
-### BoardState
+### PieceInfo
+
+보드 위 기물 정보입니다.
 
 ```java
-public static class BoardState {
-    public Color ownerColor;  // 기물 소유자
-    public Map<String, Color> board; // 좌표 → 색상
+public static final class PieceInfo {
+    public final String name;      // 기물 이름 (scriptName)
+    public final boolean isWhite;  // 백 여부
+    public final int owner;        // 소유자 (0=백, 1=흑, 2=중립)
     
-    // 좌표를 문자열로 변환
-    public static String pos(int x, int y) {
-        return x + "," + y;
-    }
+    public boolean isNeutral() { return owner == 2; }
 }
 ```
 
-### Color
+### BoardState
+
+인터프리터가 행마법을 계산할 때 참조하는 외부 상태입니다.
 
 ```java
-public enum Color {
-    WHITE,
-    BLACK,
-    EMPTY  // 빈 칸
+public static final class BoardState {
+    public int boardWidth;          // 보드 너비 (8)
+    public int boardHeight;         // 보드 높이 (8)
+    public int pieceX;              // 현재 기물 X
+    public int pieceY;              // 현재 기물 Y
+    public String pieceName;        // 현재 기물 이름
+    public boolean isWhite;         // 현재 기물이 백인지
+    
+    // (x,y) → PieceInfo
+    public final Map<Long, PieceInfo> pieces;
+    // 전역 상태
+    public final Map<String, Integer> state;
+    // 위협 칸
+    public final Set<Long> dangerSquares;
+    // 체크 상태
+    public boolean inCheck;
+    // 이동 히스토리
+    public final List<GameState.MoveRecord> moveHistory;
 }
+```
+
+### BoardState 주요 메서드
+
+```java
+// 좌표 → 키 변환
+static long key(int x, int y)
+
+// 기물 배치 (소유자 자동 결정: white → 0, !white → 1)
+void putPiece(int x, int y, String name, boolean white)
+
+// 기물 배치 (소유자 직접 지정, 중립 가능)
+void putPiece(int x, int y, String name, boolean white, int owner)
+
+// 범위 확인
+boolean inBounds(int x, int y)
+
+// 빈 칸 확인
+boolean isEmpty(int x, int y)
+
+// 적 판정 (중립 기물은 적이 아님)
+boolean hasEnemy(int x, int y)
+
+// 아군 판정 (중립 기물은 모두에게 아군)
+boolean hasFriendly(int x, int y)
+
+// 특정 기물 확인
+boolean hasPiece(int x, int y, String pieceName)
+
+// 전역 상태 조회
+int getState(String key)
+
+// 위협 확인
+boolean isDanger(int x, int y)
+
+// 히스토리: 특정 종류의 기물이 이동한 적이 있는지
+boolean hasKindMoved(String kindName)
+
+// 히스토리: 특정 좌표 간 이동이 존재하는지
+boolean hasMoveExists(int fromX, int fromY, int toX, int toY)
 ```
 
 ### 보드 상태 생성 예제
 
 ```java
-BuiltinOps.BoardState board = new BuiltinOps.BoardState();
-board.ownerColor = BuiltinOps.Color.WHITE;
+// 보드 상태 생성
+BuiltinOps.BoardState board = new BuiltinOps.BoardState(
+    8, 8,       // boardWidth, boardHeight
+    3, 3,       // pieceX, pieceY (d4)
+    "knight",   // pieceName
+    true        // isWhite
+);
 
 // 기물 배치
-board.board.put(BuiltinOps.BoardState.pos(0, 0), BuiltinOps.Color.WHITE);
-board.board.put(BuiltinOps.BoardState.pos(1, 1), BuiltinOps.Color.BLACK);
-board.board.put(BuiltinOps.BoardState.pos(2, 2), BuiltinOps.Color.BLACK);
+board.putPiece(4, 5, "pawn", false);  // 흑 폰 at e6
+board.putPiece(2, 4, "rook", true);   // 백 룩 at c5
 
-// Interpreter 실행
+// 중립 기물 배치
+board.putPiece(5, 3, "bishop", true, 2); // 중립 비숍 at f4
+
+// 인터프리터 실행
 Interpreter interpreter = new Interpreter();
-interpreter.parse("take-move(1, 1); take-move(2, 2);");
+interpreter.parse("take-move(1, 2); take-move(2, 1);");
 List<AST.Activation> acts = interpreter.execute(board);
-
-// 결과: [(1,1), (2,2)] 두 개의 activation
 ```
 
 ---
@@ -409,7 +543,7 @@ take-move(0, 1);   # 앵커: (0,1)
 스코프는 앵커를 격리합니다.
 
 ```chessembly
-# Tempest Rook: 대각선 1칸 후 직선
+# Tempest Rook: 대각선 1칸 후 직선 분기
 take-move(1, 1) {
     take-move(1, 0) repeat(1)
 } {
@@ -417,9 +551,9 @@ take-move(1, 1) {
 };
 
 # 동작:
-# 1. (1,1)로 이동 성공
-# 2. 첫 번째 { }: 앵커 저장 → (1,0) 방향 반복 → 앵커 복원
-# 3. 두 번째 { }: 앵커 저장 → (0,1) 방향 반복 → 앵커 복원
+# 1. (1,1)로 이동 성공 시
+# 2. 첫 번째 { }: 앵커 저장 → (1,0) 방향 무한 반복 → 앵커 복원
+# 3. 두 번째 { }: 앵커 저장 → (0,1) 방향 무한 반복 → 앵커 복원
 ```
 
 ### 3. do-while 루프
@@ -429,9 +563,9 @@ take-move(1, 1) {
 do peek(1, 0) while take-move(1, 0);
 
 # 동작:
-# 1. peek(1,0) - 기물이 있으면 true
+# 1. peek(1,0) - 다음 칸에 기물이 있는지 확인
 # 2. true면 take-move(1,0) 실행 → 반복
-# 3. false면 종료
+# 3. false면 종료 (기물 뛰어넘기 완료)
 ```
 
 ### 4. 조건부 점프
@@ -457,6 +591,42 @@ do take(1, 0) enemy(0, 0) not while jump(1, 0) repeat(1);
 # enemy(0, 0) not: 적이 아니면 (빈 칸 또는 아군)
 ```
 
+### 6. 소환 활용
+
+```chessembly
+# 이동 후 뒤에 폰을 소환
+move(0, 1) summon(pawn, 0, -1);
+# (0,1)로 이동 성공 시 현재 위치 기준 (0,-1)에 폰 소환
+
+# 전방에 나이트 소환
+take-move(1, 0) summon(knight, 2, 0);
+```
+
+### 7. 자동 이동 설정
+
+```chessembly
+# 이동 후 오른쪽으로 자동 이동 (take-move 모드)
+move(0, 1) auto(1, 0);
+# 매 턴 종료 시 자동으로 (1,0) 방향 이동. 실패하면 해제.
+
+# 이동 후 위로 자동 이동 (shift 모드)
+take-move(1, 0) auto-shift(0, 1);
+# 매 턴 종료 시 자동으로 (0,1) 방향 이동. 기물이 있으면 교환.
+```
+
+### 8. 히스토리 조건 활용
+
+```chessembly
+# 나이트가 이동한 적이 없을 때만 실행
+history-moved(knight) not take-move(2, 0);
+# 나이트가 아직 이동하지 않았으면 (2,0)으로 이동 가능
+
+# 특정 좌표 간 이동이 있었을 때만 실행
+history-exists(4, 0, 4, 2) take-move(0, 1);
+# (4,0)→(4,2) 이동이 기록에 있으면 (0,1) 이동 가능
+# 캐슬링 등 특수 규칙 구현에 활용
+```
+
 ---
 
 ## 실전 예제
@@ -475,82 +645,52 @@ String teleporterScript =
 Interpreter interpreter = new Interpreter();
 interpreter.parse(teleporterScript);
 
-// 보드 설정
-BuiltinOps.BoardState board = new BuiltinOps.BoardState();
-board.ownerColor = BuiltinOps.Color.WHITE;
+BuiltinOps.BoardState board = new BuiltinOps.BoardState(
+    8, 8, 3, 3, "teleporter", true);
 
 List<AST.Activation> acts = interpreter.execute(board);
 System.out.println("텔레포터 이동 가능: " + acts.size() + "칸");
 ```
 
-### 예제 2: 조건부 이동 "카멜레온"
+### 예제 2: 소환 기물 "네크로맨서"
 
-주변 기물에 따라 이동 패턴이 바뀌는 기물.
-
-```java
-String chameleonScript = 
-    // 적이 있으면 나이트처럼
-    "enemy(1, 0) {" +
-    "  take-move(1, 2); take-move(2, 1);" +
-    "  take-move(2, -1); take-move(1, -2);" +
-    "};" +
-    
-    // 아군이 있으면 비숍처럼
-    "friendly(1, 0) {" +
-    "  take-move(1, 1) repeat(1);" +
-    "  take-move(1, -1) repeat(1);" +
-    "};" +
-    
-    // 기본: 킹처럼
-    "take-move(1, 0); take-move(-1, 0);" +
-    "take-move(0, 1); take-move(0, -1);";
-
-// 실행...
-```
-
-### 예제 3: 복잡한 기물 "드래곤"
-
-여러 이동 패턴을 조합.
+이동 시 뒤에 폰을 소환하는 기물.
 
 ```java
-String dragonScript = 
-    // 1. 직선 2칸 점프
-    "take-move(2, 0); take-move(-2, 0);" +
-    "take-move(0, 2); take-move(0, -2);" +
-    
-    // 2. 대각선 슬라이딩
-    "take-move(1, 1) repeat(1);" +
-    "take-move(1, -1) repeat(1);" +
-    "take-move(-1, 1) repeat(1);" +
-    "take-move(-1, -1) repeat(1);" +
-    
-    // 3. 나이트 점프
-    "take-move(1, 2); take-move(2, 1);";
+String necromancerScript = 
+    // 1칸 직선 이동 후 원래 자리에 폰 소환
+    "move(1, 0) summon(pawn, -1, 0); " +
+    "move(-1, 0) summon(pawn, 1, 0); " +
+    "move(0, 1) summon(pawn, 0, -1); " +
+    "move(0, -1) summon(pawn, 0, 1); " +
+    // 적 잡기는 소환 없음
+    "take(1, 0); take(-1, 0); take(0, 1); take(0, -1);";
 
 Interpreter interpreter = new Interpreter();
-interpreter.setDebug(true); // 디버그 모드
-interpreter.parse(dragonScript);
+interpreter.parse(necromancerScript);
+```
 
-// 실행 및 분석
-List<AST.Activation> acts = interpreter.execute(board);
+### 예제 3: 자동이동 기물 "미사일"
 
-System.out.println("\n드래곤 합법 수:");
-for (AST.Activation act : acts) {
-    System.out.printf("  (%d, %d) - %s%n", 
-        act.dx, act.dy, act.moveType);
-}
+이동 후 특정 방향으로 자동 이동하는 기물.
+
+```java
+String missileScript = 
+    // 전방 이동 시 계속 전진
+    "move(0, 1) auto(0, 1); " +
+    // 대각 이동 시 대각 자동이동
+    "move(1, 1) auto(1, 1); " +
+    "move(-1, 1) auto(-1, 1);";
+
+Interpreter interpreter = new Interpreter();
+interpreter.parse(missileScript);
 ```
 
 ### 예제 4: 스크립트 동적 생성
 
-플레이어 입력으로 행마법 생성.
-
 ```java
 public class DynamicScriptGenerator {
     
-    /**
-     * 사용자 정의 이동 패턴으로 스크립트 생성
-     */
     public static String generateScript(List<int[]> movePatterns, boolean canRepeat) {
         StringBuilder script = new StringBuilder();
         
@@ -573,138 +713,40 @@ public class DynamicScriptGenerator {
     public static void main(String[] args) {
         // 사용자 정의: 십자가 패턴
         List<int[]> patterns = Arrays.asList(
-            new int[]{1, 0},
-            new int[]{-1, 0},
-            new int[]{0, 1},
-            new int[]{0, -1}
+            new int[]{1, 0}, new int[]{-1, 0},
+            new int[]{0, 1}, new int[]{0, -1}
         );
         
         String script = generateScript(patterns, true);
-        System.out.println("생성된 스크립트:");
-        System.out.println(script);
+        System.out.println("생성된 스크립트: " + script);
         
-        // 실행
         Interpreter interpreter = new Interpreter();
         interpreter.parse(script);
-        // ...
     }
 }
 ```
 
-### 예제 5: 스크립트 검증기
-
-스크립트 오류를 미리 확인.
-
-```java
-public class ScriptValidator {
-    
-    public static class ValidationResult {
-        public boolean valid;
-        public String error;
-        public List<AST.Token> tokens;
-    }
-    
-    /**
-     * 스크립트 유효성 검증
-     */
-    public static ValidationResult validate(String script) {
-        ValidationResult result = new ValidationResult();
-        
-        try {
-            // 1. 파싱 테스트
-            List<AST.Token> tokens = Parser.parse(script);
-            result.tokens = tokens;
-            
-            // 2. 빈 스크립트 확인
-            if (tokens.isEmpty()) {
-                result.valid = false;
-                result.error = "빈 스크립트";
-                return result;
-            }
-            
-            // 3. 문법 확인 (간단한 예시)
-            for (AST.Token token : tokens) {
-                if (token.type == AST.TokenType.MOVE ||
-                    token.type == AST.TokenType.TAKE) {
-                    if (token.args == null || token.args.length != 2) {
-                        result.valid = false;
-                        result.error = "잘못된 이동 인자: " + token;
-                        return result;
-                    }
-                }
-            }
-            
-            // 4. 실행 테스트 (빈 보드)
-            Interpreter interpreter = new Interpreter();
-            interpreter.parse(script);
-            
-            BuiltinOps.BoardState emptyBoard = new BuiltinOps.BoardState();
-            emptyBoard.ownerColor = BuiltinOps.Color.WHITE;
-            
-            interpreter.execute(emptyBoard);
-            
-            result.valid = true;
-            return result;
-            
-        } catch (Exception e) {
-            result.valid = false;
-            result.error = e.getMessage();
-            return result;
-        }
-    }
-    
-    public static void main(String[] args) {
-        String[] testScripts = {
-            "move(1, 0); take(1, 1);",
-            "take-move(1, 0) repeat(1);",
-            "invalid syntax here",
-            ""
-        };
-        
-        for (String script : testScripts) {
-            ValidationResult result = validate(script);
-            System.out.printf("스크립트: '%s'%n", script);
-            System.out.printf("  유효: %b%n", result.valid);
-            if (!result.valid) {
-                System.out.printf("  오류: %s%n", result.error);
-            }
-            System.out.println();
-        }
-    }
-}
-```
-
-### 예제 6: 시각화 도구
-
-스크립트 실행을 ASCII로 시각화.
+### 예제 5: 시각화 도구
 
 ```java
 public class ChessemblyVisualizer {
     
-    /**
-     * 8x8 보드에 activation 결과를 시각화
-     */
     public static void visualize(
         Move.Square startPos,
         List<AST.Activation> activations
     ) {
-        // 보드 초기화
         char[][] board = new char[8][8];
-        for (int y = 0; y < 8; y++) {
-            for (int x = 0; x < 8; x++) {
+        for (int y = 0; y < 8; y++)
+            for (int x = 0; x < 8; x++)
                 board[y][x] = '.';
-            }
-        }
         
-        // 시작 위치 표시
         board[startPos.y][startPos.x] = 'S';
         
-        // Activation 표시
         for (AST.Activation act : activations) {
-            int targetX = startPos.x + act.dx;
-            int targetY = startPos.y + act.dy;
+            int tx = startPos.x + act.dx;
+            int ty = startPos.y + act.dy;
             
-            if (targetX >= 0 && targetX < 8 && targetY >= 0 && targetY < 8) {
+            if (tx >= 0 && tx < 8 && ty >= 0 && ty < 8) {
                 char marker;
                 switch (act.moveType) {
                     case MOVE:      marker = 'M'; break;
@@ -715,44 +757,18 @@ public class ChessemblyVisualizer {
                     case SHIFT:     marker = 'H'; break;
                     default:        marker = '?';
                 }
-                board[targetY][targetX] = marker;
+                board[ty][tx] = marker;
             }
         }
         
-        // 출력
         System.out.println("  a b c d e f g h");
         for (int y = 7; y >= 0; y--) {
             System.out.print((y + 1) + " ");
-            for (int x = 0; x < 8; x++) {
+            for (int x = 0; x < 8; x++)
                 System.out.print(board[y][x] + " ");
-            }
             System.out.println((y + 1));
         }
         System.out.println("  a b c d e f g h");
-        System.out.println("S=시작, M=move, T=take, X=take-move, J=jump, C=catch, H=shift");
-    }
-    
-    public static void main(String[] args) {
-        // 나이트 행마법 시각화
-        String knightScript = 
-            "take-move(1, 2); take-move(2, 1); " +
-            "take-move(2, -1); take-move(1, -2); " +
-            "take-move(-1, 2); take-move(-2, 1); " +
-            "take-move(-2, -1); take-move(-1, -2);";
-        
-        Interpreter interpreter = new Interpreter();
-        interpreter.parse(knightScript);
-        
-        BuiltinOps.BoardState board = new BuiltinOps.BoardState();
-        board.ownerColor = BuiltinOps.Color.WHITE;
-        
-        List<AST.Activation> acts = interpreter.execute(board);
-        
-        // d4에서 시작
-        Move.Square d4 = new Move.Square(3, 3);
-        
-        System.out.println("나이트 (d4):");
-        visualize(d4, acts);
     }
 }
 ```
@@ -767,8 +783,6 @@ public class ChessemblyVisualizer {
 Interpreter interpreter = new Interpreter();
 interpreter.setDebug(true);
 interpreter.parse(script);
-
-// 상세 실행 로그 출력
 List<AST.Activation> acts = interpreter.execute(board);
 ```
 
@@ -778,35 +792,15 @@ List<AST.Activation> acts = interpreter.execute(board);
 List<AST.Token> tokens = Parser.parse(script);
 System.out.println("토큰 목록:");
 for (int i = 0; i < tokens.size(); i++) {
-    AST.Token t = tokens.get(i);
-    System.out.printf("%d: %s %s%n", i, t.type, Arrays.toString(t.args));
+    System.out.printf("%d: %s%n", i, tokens.get(i));
 }
-```
-
-### 3. 앵커 추적
-
-```java
-// 디버그 출력에서 Anchor 값을 확인하여
-// 연속 이동이 올바르게 동작하는지 확인
 ```
 
 ---
 
 ## 성능 최적화
 
-### 1. 스크립트 캐싱
-
-```java
-public class ScriptCache {
-    private final Map<String, List<AST.Token>> cache = new HashMap<>();
-    
-    public List<AST.Token> parse(String script) {
-        return cache.computeIfAbsent(script, Parser::parse);
-    }
-}
-```
-
-### 2. 사전 컴파일
+### 스크립트 사전 컴파일
 
 ```java
 // 게임 시작 시 모든 기물 스크립트 파싱

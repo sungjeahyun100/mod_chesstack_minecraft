@@ -151,8 +151,7 @@ String script = "take-move(1, 0) repeat(1); take-move(0, 1) repeat(1);";
 interpreter.parse(script);
 
 // 보드 상태 생성
-BuiltinOps.BoardState board = new BuiltinOps.BoardState();
-board.ownerColor = BuiltinOps.Color.WHITE;
+BuiltinOps.BoardState board = new BuiltinOps.BoardState(8, 8, 3, 3, "rook", true);
 
 // 실행
 List<AST.Activation> activations = interpreter.execute(board);
