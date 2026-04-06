@@ -159,7 +159,8 @@ public final class GameState {
             new Piece.PieceSpec(Piece.PieceKind.TEMPEST_ROOK),
             new Piece.PieceSpec(Piece.PieceKind.CANNON),
             new Piece.PieceSpec(Piece.PieceKind.BOUNCING_BISHOP),
-            new Piece.PieceSpec(Piece.PieceKind.EXPERIMENT)
+            new Piece.PieceSpec(Piece.PieceKind.EXPERIMENT),
+            new Piece.PieceSpec(Piece.PieceKind.DSL_TESTING_PIECE)
         );
         setupPocketUnchecked(0, new ArrayList<>(pocket));
         setupPocketUnchecked(1, new ArrayList<>(pocket));

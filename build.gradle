@@ -23,3 +23,12 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
 }
+
+// CLI 실행: ./gradlew runCli
+tasks.register('runCli', JavaExec) {
+    group = 'application'
+    description = 'ChessStack CLI 테스터를 실행합니다'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.chesstack.cli.ChessStackCLI'
+    standardInput = System.in
+}

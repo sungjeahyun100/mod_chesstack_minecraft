@@ -31,7 +31,8 @@ public final class Piece {
         TEMPEST_ROOK("tempestrook", 7),
         CANNON("cannon", 5),
         BOUNCING_BISHOP("bouncingbishop", 7),
-        EXPERIMENT("experiment", 1);
+        EXPERIMENT("experiment", 1),
+        DSL_TESTING_PIECE("dsltesting", 1);
 
         private final String scriptName;
         private final int score;
@@ -168,6 +169,9 @@ public final class Piece {
                          + " move(1, 1); move(-1, 1); move(-1, -1); move(1, -1);"
                          + " catch(2, 2);";
 
+                case DSL_TESTING_PIECE:
+                    return "";
+
                 default:
                     return "";
             }
@@ -196,6 +200,7 @@ public final class Piece {
                 case "cannon": return CANNON;
                 case "bouncingbishop": return BOUNCING_BISHOP;
                 case "experiment": return EXPERIMENT;
+                case "dsltesting": return DSL_TESTING_PIECE;
                 default: throw new IllegalArgumentException("알 수 없는 기물: " + s);
             }
         }

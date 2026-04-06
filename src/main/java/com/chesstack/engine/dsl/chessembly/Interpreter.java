@@ -593,4 +593,9 @@ public final class Interpreter {
         }
         list.add(new AST.Activation(dx, dy, moveType, tags, catchTo, strArg));
     }
+
+    /** 단계별 디버그 세션 생성 */
+    public DebugSession createDebugSession(BuiltinOps.BoardState board) {
+        return new DebugSession(board);
+    }
 }

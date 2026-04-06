@@ -303,13 +303,11 @@ do peek(0, -1) while friendly(0, 0) move(0, -1) repeat(1);
 
 ### 1. `summon(kind, dx, dy)` (소환)
 
-`summon`은 `set-state`나 `transition`처럼 **수식어(Modifier)** 역할을 합니다.
-
-이 식 **이후에** 활성화되는 모든 칸(🔵)에 "클릭 시 `(dx, dy)` 위치에 `kind` 기물을 소환"하는 액션 태그를 부착합니다.
+`summon`은 새로 추가된 행마식으로, 기물을 앵커 위치 기준으로 새로 설치하는 활성화를 추가합니다.
 
 ```less
-# 이동하면서 (1, 0) 위치에 pawn을 소환
-summon(pawn, 1, 0) take-move(0, 1);
+# 앵커 위치 기준으로 1, 0칸에 폰을 설치하는 행마식
+summon(pawn, 1, 0);
 ```
 
 소환된 기물은 현재 플레이어 소유의 기물로 배치됩니다.
