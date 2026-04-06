@@ -121,6 +121,7 @@ for (Map.Entry<String, String> entry : allScripts.entrySet()) {
 - amazon, grasshopper, knightrider, archbishop
 - dabbaba, alfil, ferz, centaur, camel
 - tempestrook, cannon, bouncingbishop, experiment
+- dsltesting (행마법 없음, 스크립트="")
 
 ---
 

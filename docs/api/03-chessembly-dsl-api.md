@@ -11,6 +11,7 @@ Chessembly는 체스 기물의 행마법(이동 패턴)을 정의하는 도메�
 - [AST](#ast) - 추상 구문 트리
 - [VM](#vm) - 가상 머신
 - [BuiltinOps](#builtinops) - 내장 연산
+- [DebugSession](#debugsession) - 단계별 실행
 - [고급 기법](#고급-기법)
 - [실전 예제](#실전-예제)
 
@@ -349,23 +350,27 @@ public static final class Token {
 
 ```java
 public enum MoveType {
+    TAKE_MOVE, // 빈 칸 또는 적
     MOVE,      // 빈 칸으로만
     TAKE,      // 적 칸으로만
-    TAKE_MOVE, // 빈 칸 또는 적
-    CATCH,     // 캡처만 (이동 안함)
+    CATCH,     // 제자리에서 캡처 (원거리)
     SHIFT,     // 위치 교환
-    JUMP       // 뛰어넘기
+    JUMP,      // take 후 점프
+    SUMMON,    // 빈 칸에 기물 소환 (이동 없음)
+    AUTO_MOVE, // 이동/잡기 + 자동 이동 설정 (take-move 모드)
+    AUTO_SHIFT // 위치 교환 + 자동 이동 설정 (shift 모드)
 }
 ```
 
 ### ActionTagType
 
 ```java
+// ActionTagType은 이동 실행 후 부가 효과를 나타낸다.
+// 참고: SUMMON, AUTO_MOVE, AUTO_SHIFT는 ActionTagType이 아닌
+//       MoveType 값으로, Activation.moveType에 포함된다.
 public enum ActionTagType {
-    TRANSITION, // 기물 변환 (transition(name))
-    SET_STATE,  // 전역 상태 설정 (set-state(key, value))
-    SUMMON,     // 기물 소환 (summon(kindName, dx, dy))
-    AUTO_MOVE   // 자동 이동 설정 (auto(dx, dy) / auto-shift(dx, dy))
+    TRANSITION, // 기물 종류 변환 (transition(name))
+    SET_STATE   // 전역 상태 설정 (set-state(key, value)) 또는 리셋
 }
 ```
 
@@ -374,20 +379,19 @@ public enum ActionTagType {
 ```java
 public static final class ActionTag {
     public final ActionTagType tagType; // 태그 종류
-    public final String key;            // 상태 키 또는 dy(문자열)
-    public final int value;             // 상태 값 또는 dx
-    public final String pieceName;      // 기물 이름 (nullable)
+    public final String key;            // 상태 키 (SET_STATE) 또는 상태 리셋 키
+    public final int value;             // 상태 값 (SET_STATE)
+    public final String pieceName;      // 기물 이름 (TRANSITION에서 사용, nullable)
 }
 
-// 예: summon(knight, 1, 2)
-// → ActionTag(SUMMON, key="2", value=1, pieceName="knight")
-// GameState에서: summonX = pieceX + value, summonY = pieceY + parseInt(key)
+// 예: transition(queen)
+// → ActionTag(TRANSITION, key=null, value=0, pieceName="queen")
 
-// 예: auto(1, 0)
-// → ActionTag(AUTO_MOVE, key="0", value=1, pieceName="take-move")
+// 예: set-state(my_key, 1)
+// → ActionTag(SET_STATE, key="my_key", value=1, pieceName=null)
 
-// 예: auto-shift(0, -1)
-// → ActionTag(AUTO_MOVE, key="-1", value=0, pieceName="shift")
+// 예: set-state-reset(my_key)
+// → ActionTag(SET_STATE, key="my_key", value=0, pieceName=null)
 ```
 
 ### Activation
@@ -397,8 +401,9 @@ public static final class Activation {
     public final int dx;               // 이동 오프셋 X
     public final int dy;               // 이동 오프셋 Y
     public final MoveType moveType;    // 이동 타입
-    public final List<ActionTag> tags; // 수집된 액션 태그
-    public final int[] catchTo;        // jump용 캡처 위치 [dx, dy] (nullable)
+    public final List<ActionTag> tags; // 수집된 액션 태그 (TRANSITION, SET_STATE)
+    public final int[] catchTo;        // JUMP용 캡처 위치 [dx, dy] 오프셋 (nullable)
+    public final String strArg;        // SUMMON: 소환할 기물 이름 (nullable)
 }
 ```
 
@@ -516,6 +521,78 @@ board.putPiece(5, 3, "bishop", true, 2); // 중립 비숍 at f4
 Interpreter interpreter = new Interpreter();
 interpreter.parse("take-move(1, 2); take-move(2, 1);");
 List<AST.Activation> acts = interpreter.execute(board);
+```
+
+---
+
+## DebugSession
+
+`DebugSession`은 Chessembly 스크립트를 한 토큰씩 단계별로 실행하는 디버거입니다. Chessembly Debugger UI 또는 테스트에서 사용됩니다.
+
+### 사용 흐름
+
+```java
+import com.chesstack.engine.dsl.chessembly.*;
+
+// 1. 보드 상태 생성
+BuiltinOps.BoardState board = new BuiltinOps.BoardState(8, 8, 3, 3, "knight", true);
+
+// 2. DebugSession 생성
+DebugSession session = new DebugSession(board);
+
+// 3. 체인 추가 (세미콜론이 없으면 자동 추가)
+session.appendChain("take-move(1, 2)");
+session.appendChain("take-move(2, 1);");
+
+// 4. 한 토큰씩 실행
+while (session.hasNext()) {
+    DebugSession.StepResult r = session.step();
+
+    System.out.printf("[PC %d→%d] %s | chain=%d anchor=(%d,%d) last=%b%n",
+        r.startPc, r.endPc, r.kind,
+        r.chainIndex, r.anchorX, r.anchorY, r.lastValue);
+
+    if (r.addedActivation != null) {
+        System.out.println("  새 합법 수: " + r.addedActivation);
+    }
+}
+```
+
+### StepKind
+
+```java
+public enum StepKind {
+    EXECUTED,  // 토큰이 정상 실행됨
+    CHAIN_END, // SEMICOLON — 체인 경계
+    SKIPPED,   // lastValue=false 여서 스킵됨
+    FINISHED   // 더 이상 토큰 없음
+}
+```
+
+### StepResult 필드
+
+```java
+public static final class StepResult {
+    public final AST.Token token;                    // 처리된 토큰 (FINISHED이면 null)
+    public final int startPc;                        // 실행 전 PC
+    public final int endPc;                          // 실행 후 PC
+    public final StepKind kind;                      // 단계 종류
+    public final int chainIndex;                     // 실행 후 체인 인덱스
+    public final int anchorX, anchorY;               // 실행 후 앵커
+    public final boolean lastValue;                  // 실행 후 lastValue
+    public final List<AST.Activation> activations;   // 누적 합법 수 스냅샷 (불변)
+    public final AST.Activation addedActivation;     // 이번 스텝에서 추가된 합법 수 (없으면 null)
+}
+```
+
+### appendChain()
+
+실행 중에도 체인을 동적으로 추가할 수 있습니다.
+
+```java
+// 실행 중 체인 추가
+int added = session.appendChain("take-move(-1, 0) repeat(1);");
+System.out.println("추가된 토큰 수: " + added);
 ```
 
 ---

@@ -76,6 +76,7 @@ String gameId = engine.createExperimentalGame();
 - Amazon, Grasshopper, Knightrider, Archbishop
 - Dabbaba, Alfil, Ferz, Centaur, Camel
 - Tempest Rook, Cannon, Bouncing Bishop, Experiment
+- DSL Testing Piece (행마법 없음, 테스트 전용)
 
 ### registerGame()
 

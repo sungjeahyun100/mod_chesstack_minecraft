@@ -343,23 +343,27 @@ boolean valid = sq.isValid(); // 0 <= x,y < 8
 
 ```java
 // 합법 수 필드
-public final Square from;           // 출발 좌표
-public final Square to;              // 도착 좌표
-public final AST.MoveType moveType;  // 이동 타입
-public final boolean isCapture;      // 캡처 여부
-public final List<AST.ActionTag> tags; // 액션 태그
-public final Square catchTo;         // jump용 잡기 위치
+public final Square from;              // 출발 좌표
+public final Square to;               // 도착 좌표
+public final AST.MoveType moveType;   // 이동 타입
+public final boolean isCapture;       // 캡처 여부
+public final List<AST.ActionTag> tags; // 액션 태그 (TRANSITION, SET_STATE)
+public final Square catchTo;          // JUMP용 잡기 위치
+public final String strArg;           // SUMMON: 소환할 기물 이름 (nullable)
 ```
 
 ### MoveType 종류
 
 ```java
-AST.MoveType.MOVE      // 빈 칸으로만 이동
-AST.MoveType.TAKE      // 적 기물 칸으로만 이동
-AST.MoveType.TAKE_MOVE // 빈 칸 또는 적 기물 칸
-AST.MoveType.CATCH     // 캡처 전용 (이동 안함, 원거리)
-AST.MoveType.SHIFT     // 자리 바꾸기
-AST.MoveType.JUMP      // 뛰어넘기
+AST.MoveType.MOVE       // 빈 칸으로만 이동
+AST.MoveType.TAKE       // 적 기물 칸으로만 이동
+AST.MoveType.TAKE_MOVE  // 빈 칸 또는 적 기물 칸
+AST.MoveType.CATCH      // 캡처 전용 (이동 안함, 원거리)
+AST.MoveType.SHIFT      // 자리 바구기
+AST.MoveType.JUMP       // 뛰어넘기 (catchTo: 잡을 위치)
+AST.MoveType.SUMMON     // 기물 소환 이동 없음, strArg에 소환 기물 이름
+AST.MoveType.AUTO_MOVE  // 이동/잡기 + 자동 이동 설정 (take-move 모드)
+AST.MoveType.AUTO_SHIFT // 위치 교환 + 자동 이동 설정 (shift 모드)
 ```
 
 ### Action (플레이어 액션)
@@ -417,6 +421,7 @@ Piece.PieceKind.TEMPEST_ROOK   // 폭풍 룩 (대각 시작 → 직선 분기)
 Piece.PieceKind.CANNON         // 캐논 (포 점프)
 Piece.PieceKind.BOUNCING_BISHOP // 반사 비숍 (벽에서 반사)
 Piece.PieceKind.EXPERIMENT     // 실험용
+Piece.PieceKind.DSL_TESTING_PIECE // DSL 테스트 전용 (행마법 없음, 스크립트="")
 ```
 
 ### PieceKind 메서드

@@ -29,6 +29,7 @@ ChessStack Java API의 완전한 사용 가이드입니다.
    - Interpreter - 스크립트 실행
    - Parser - 스크립트 파싱
    - AST - 추상 구문 트리
+   - DebugSession - 단계별 실행
    - 고급 기법 및 디버깅
 
 4. **[Minecraft Integration API](04-minecraft-integration-api.md)** - 고수준 API
@@ -57,11 +58,11 @@ String gameId = engine.createGame();
 
 // 백: 나이트 착수
 engine.placePiece(gameId, "knight", 3, 3);
-engine.endTurn();
+engine.endTurn(gameId);
 
 // 흑: 폰 착수
 engine.placePiece(gameId, "pawn", 4, 4);
-engine.endTurn();
+engine.endTurn(gameId);
 
 // 백: 나이트로 캡처
 engine.makeMove(gameId, 3, 3, 4, 4);
