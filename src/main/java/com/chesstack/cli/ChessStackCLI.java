@@ -31,12 +31,12 @@ public class ChessStackCLI {
 
     static {
         // [0]=백, [1]=흑
-        SYMBOLS.put("pawn",           new String[]{"♙", "♟"});
-        SYMBOLS.put("king",           new String[]{"♔", "♚"});
-        SYMBOLS.put("queen",          new String[]{"♕", "♛"});
-        SYMBOLS.put("rook",           new String[]{"♖", "♜"});
-        SYMBOLS.put("knight",         new String[]{"♘", "♞"});
-        SYMBOLS.put("bishop",         new String[]{"♗", "♝"});
+        SYMBOLS.put("pawn",           new String[]{"P", "p"});
+        SYMBOLS.put("king",           new String[]{"K", "k"});
+        SYMBOLS.put("queen",          new String[]{"Q", "q"});
+        SYMBOLS.put("rook",           new String[]{"R", "r"});
+        SYMBOLS.put("knight",         new String[]{"N", "n"});
+        SYMBOLS.put("bishop",         new String[]{"B", "b"});
         SYMBOLS.put("amazon",         new String[]{"A", "a"});
         SYMBOLS.put("grasshopper",    new String[]{"G", "g"});
         SYMBOLS.put("knightrider",    new String[]{"R", "r"});
@@ -66,7 +66,7 @@ public class ChessStackCLI {
                                    Set<Move.Square> highlights) {
         List<Piece.PieceData> pieces = engine.getBoardPieces(gameId);
 
-        // 좌표 → 기물 맵
+        // 좌표 -> 기물 맵
         Map<String, Piece.PieceData> grid = new HashMap<>();
         for (Piece.PieceData p : pieces) {
             if (p.pos != null) {
@@ -315,7 +315,7 @@ public class ChessStackCLI {
                         if (sq == null) { System.out.println("  올바르지 않은 칸: " + tokens[2]); break; }
 
                         String placedId = engine.placePiece(gameId, kindName, sq.x, sq.y);
-                        System.out.println("  [" + kindName + "] → " + tokens[2] + " (ID: " + placedId + ")");
+                        System.out.println("  [" + kindName + "] -> " + tokens[2] + " (ID: " + placedId + ")");
                         printStatus(engine, gameId);
                         printBoard(engine, gameId, Collections.singleton(sq));
                         break;
@@ -329,7 +329,7 @@ public class ChessStackCLI {
                         if (to   == null) { System.out.println("  올바르지 않은 칸: " + tokens[2]); break; }
 
                         String captured = engine.makeMove(gameId, from.x, from.y, to.x, to.y);
-                        System.out.print("  이동: " + tokens[1] + " → " + tokens[2]);
+                        System.out.print("  이동: " + tokens[1] + " -> " + tokens[2]);
                         if (captured != null) System.out.print("  (캡처: " + captured + ")");
                         System.out.println();
                         printStatus(engine, gameId);
@@ -671,7 +671,7 @@ public class ChessStackCLI {
         String tokenStr = r.token != null ? dslTokenStr(r.token) : "?";
 
         if (r.kind == DebugSession.StepKind.SKIPPED) {
-            System.out.printf("  ✗ [PC=%d] %s  → SKIP (last=false)  │  PC→%d %n",
+            System.out.printf("  ✗ [PC=%d] %s  -> SKIP (last=false)  │  PC->%d %n",
                     r.startPc, tokenStr, r.endPc);
             return;
         }
@@ -684,11 +684,11 @@ public class ChessStackCLI {
                         r.addedActivation.moveType)
                 : "";
         String pcJump = r.endPc != r.startPc + 1
-                ? String.format("  PC→%d", r.endPc)
+                ? String.format("  PC->%d", r.endPc)
                 : "";
 
         if (r.kind == DebugSession.StepKind.CHAIN_END) {
-            System.out.printf("  ── [PC=%d] %s  (체인 %d 종료 → 체인 %d)%n",
+            System.out.printf("  ── [PC=%d] %s  (체인 %d 종료 -> 체인 %d)%n",
                     r.startPc, tokenStr, r.chainIndex - 1, r.chainIndex);
         } else {
             System.out.printf("  %s [PC=%d] %-30s  Anchor=(%d,%d)  last=%s%s%s%n",
@@ -727,7 +727,7 @@ public class ChessStackCLI {
     private static void dslPrintBoard(BuiltinOps.BoardState board,
                                        List<AST.Activation> activations,
                                        int anchorX, int anchorY) {
-        // 활성화 → 대상 칸 셋
+        // 활성화 -> 대상 칸 셋
         Set<String> actKeys = new HashSet<>();
         for (AST.Activation a : activations) {
             int tx = board.pieceX + a.dx;
